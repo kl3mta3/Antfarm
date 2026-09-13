@@ -388,8 +388,9 @@ The server hosts two things at once.
 | Tending, speed, new colony | A signed-in keeper only | Anyone, no account |
 | Saved | On the server (`ANTFARM_DATA`) | In your browser's storage |
 
-The **Run your own** button on the house farm opens `/play` in a new tab, and
-**Watch the house farm** there brings you back.
+The **Personal Farm** button on the house farm opens `/play` in a new tab, and
+**Switch to Main Farm** there brings you back. That label stays fixed, whatever
+the house farm has been named.
 
 ### How the house farm reaches your screen
 
