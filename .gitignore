@@ -5,3 +5,4 @@
 /data/
 *.log
 *house.json
+data/house.json
