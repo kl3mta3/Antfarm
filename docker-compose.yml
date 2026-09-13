@@ -1,0 +1,21 @@
+services:
+  antfarm:
+    build: .
+    ports:
+      - "8173:8173"
+    # The keeper's name and password live in a local .env file beside this one
+    # (copy .env.example). It is never copied into the image and should never
+    # be committed or shared. The server only compares what's typed at sign-in
+    # against these; they're never sent to a browser.
+    env_file:
+      - .env
+    environment:
+      ANTFARM_SESSION_HOURS: "${ANTFARM_SESSION_HOURS:-72}"
+    volumes:
+      - antfarm-data:/data          # the house farm, kept across restarts and rebuilds
+    restart: unless-stopped
+    # Give the server a moment to save the farm on shutdown.
+    stop_grace_period: 15s
+
+volumes:
+  antfarm-data:

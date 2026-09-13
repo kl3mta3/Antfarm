@@ -1,0 +1,10 @@
+.git
+node_modules
+*.bak
+*.log
+.claude
+README.md
+# Never bake a login or a saved farm into an image.
+.env
+.env.*
+data
