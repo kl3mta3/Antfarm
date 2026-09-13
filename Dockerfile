@@ -10,14 +10,14 @@ COPY landing ./landing
 # The house farm is saved here. Mount a volume so it survives the container.
 # su-exec lets the entrypoint fix /data's ownership as root and then run the
 # server as the unprivileged node user (see docker-entrypoint.sh).
-RUN apk add --no-cache su-exec && mkdir -p /data && chown node:node /data
+RUN apk add --no-cache su-exec && mkdir -p /data/antfarm && chown node:node /data/antfarm
 COPY docker-entrypoint.sh /usr/local/bin/antfarm-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/antfarm-entrypoint.sh && chmod +x /usr/local/bin/antfarm-entrypoint.sh
 VOLUME /data
 
 ENV NODE_ENV=production
 ENV PORT=8173
-ENV ANTFARM_DATA=/data/house.json
+ENV ANTFARM_DATA=/data/antfarm/house.json
 ENV ANTFARM_SESSION_HOURS=72
 # ANTFARM_USER and ANTFARM_PASSWORD are deliberately NOT set here: an image
 # should never carry a login. Pass them at run time (see docker-compose.yml and

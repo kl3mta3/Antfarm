@@ -103,7 +103,12 @@
         let r, g, b;
         if (t === T.AIR) {
           if (above < W.surfY[x]) {           // open sky above the soil line
-            const k = y / Math.max(1, W.surfY[x]);
+            // Shaded by height alone, the same for every column. Scaled to
+            // each column's own ground line, a column whose ground sits a few
+            // tiles lower (an entrance, a dip between spoil heaps) got its own
+            // slightly different shade all the way up: a faint stripe through
+            // the sky above every entrance.
+            const k = Math.min(1, y / (C.SKY + 8));
             r = 22 + k * 14; g = 27 + k * 16; b = 38 + k * 14;
           } else {                              // excavated tunnel
             r = 20; g = 15; b = 12;

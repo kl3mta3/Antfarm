@@ -456,11 +456,21 @@ docker compose up -d --build
 The house farm is saved to a named volume (`antfarm-data`), so it survives
 restarts and rebuilds. It saves every 60 seconds and again on shutdown.
 
-The volume mounted at `/data` doesn't need any particular ownership. Volumes
-are often created owned by root (Coolify's was), and the server runs as the
-unprivileged `node` user, so every save used to be refused and the farm was
-lost on each redeploy. The container now starts as root just long enough to
-hand `/data` to `node` (`docker-entrypoint.sh`), then runs the server as `node`.
+The farm is saved in its own folder, `/data/antfarm/house.json`. The server runs
+as the unprivileged `node` user, and mounted storage is often owned by root, so
+saves used to be refused and the farm was lost on each redeploy. The container
+now starts as root just long enough to hand **only that folder** to `node`
+(`docker-entrypoint.sh`), and only when it holds nothing but the farm's own save
+files. Then it runs the server as `node`.
+
+**Mount storage for the farm alone.** In Coolify, use a Docker volume (leave the
+source path empty), or a host folder used only by this app such as
+`/data/antfarm`. Never mount the host's own `/data`: Coolify keeps its own files
+there. An earlier version of the startup script changed ownership of everything
+under `/data`, which on a host-folder mount reached Coolify's SSH keys and broke
+deploys. If that happened to you, restore Coolify's ownership as its install
+guide sets it (`chown -R 9999:root /data/coolify` and
+`chmod -R 700 /data/coolify`), and check what else lives in the host's `/data`.
 
 To check the farm is being kept, look at `/api/house/status`: `saving` should be
 `ok`, and `lastSavedSecondsAgo` should be a number once it has run a minute. The
