@@ -227,17 +227,100 @@
     }
   });
 
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
+  // Zoom by a factor, keeping the world point under (clientX, clientY) still.
+  // A phone's high-density screen gets a closer maximum, or ants never get
+  // big enough to make out; with a mouse the limit is what it always was.
+  const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  function zoomAt(clientX, clientY, factor) {
+    const maxZoom = coarsePointer ? 14 * Math.max(1, R.dpr / 1.5) : 14;
     const rect = canvas.getBoundingClientRect();
-    const before = R.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    R.cam.zoom = Math.max(0.35, Math.min(14, R.cam.zoom * factor));
-    const after = R.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const before = R.screenToWorld(clientX - rect.left, clientY - rect.top);
+    R.cam.zoom = Math.max(0.35, Math.min(maxZoom, R.cam.zoom * factor));
+    const after = R.screenToWorld(clientX - rect.left, clientY - rect.top);
     R.cam.x += before.x - after.x;
     R.cam.y += before.y - after.y;
     R.clampCam();
+  }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
   }, { passive: false });
+
+  // ---- touch: one finger pans, two fingers pinch to zoom, a tap selects ----
+  // Phones don't turn drags or pinches into mouse or wheel events, so without
+  // this the farm could only ever be seen at its fitted, zoomed-out size.
+  // Only touch events are handled here; mouse and wheel are untouched.
+  let touchMode = null, tapOk = false;
+  let tapX = 0, tapY = 0, lastTX = 0, lastTY = 0, pinchSpread = 0;
+  const midOf = t => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  const spreadOf = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const panBy = (dx, dy) => {
+    const s = R.cam.zoom * C.TILE / R.dpr;
+    R.cam.x -= dx / s;
+    R.cam.y -= dy / s;
+    R.clampCam();
+  };
+  function startPinch(t) {
+    touchMode = 'pinch';
+    tapOk = false;
+    pinchSpread = spreadOf(t);
+    const m = midOf(t);
+    lastTX = m.x; lastTY = m.y;
+  }
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const t = e.touches;
+    if (t.length === 1) {
+      touchMode = 'pan';
+      tapOk = true;
+      tapX = lastTX = t[0].clientX;
+      tapY = lastTY = t[0].clientY;
+    } else if (t.length >= 2) {
+      startPinch(t);
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = e.touches;
+    if (t.length >= 2) {
+      if (touchMode !== 'pinch') { startPinch(t); return; }
+      const m = midOf(t), spread = spreadOf(t);
+      zoomAt(m.x, m.y, spread / Math.max(1, pinchSpread));
+      panBy(m.x - lastTX, m.y - lastTY);            // two fingers also drag the view
+      pinchSpread = spread;
+      lastTX = m.x; lastTY = m.y;
+    } else if (t.length === 1 && touchMode === 'pan') {
+      if (Math.abs(t[0].clientX - tapX) + Math.abs(t[0].clientY - tapY) > 10) tapOk = false;
+      panBy(t[0].clientX - lastTX, t[0].clientY - lastTY);
+      lastTX = t[0].clientX; lastTY = t[0].clientY;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();          // no emulated mouse click on top of our tap
+    if (e.touches.length === 0) {
+      if (touchMode === 'pan' && tapOk) handleClick({ clientX: tapX, clientY: tapY });
+      touchMode = null;
+    } else if (e.touches.length === 1) {
+      // One finger lifted mid-pinch: carry on panning with the other.
+      touchMode = 'pan';
+      tapOk = false;
+      lastTX = tapX = e.touches[0].clientX;
+      lastTY = tapY = e.touches[0].clientY;
+    }
+  }, { passive: false });
+  canvas.addEventListener('touchcancel', () => { touchMode = null; tapOk = false; });
+
+  // Zoom buttons (shown on touch screens only), around the middle of the view.
+  const zoomFromCentre = factor => {
+    const rect = canvas.getBoundingClientRect();
+    zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+  };
+  $('zoomIn').onclick = () => zoomFromCentre(1.5);
+  $('zoomOut').onclick = () => zoomFromCentre(1 / 1.5);
 
   function handleClick(e) {
     const rect = canvas.getBoundingClientRect();

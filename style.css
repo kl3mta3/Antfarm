@@ -146,6 +146,24 @@
   .embed #toolbar, .embed #side, .embed #flash { display: none !important; }
   .embed #app { flex-direction: row; }
 
+  /* ---- touch screens ----
+     The canvas handles its own drag and pinch, so the page mustn't scroll or
+     zoom under the finger. A mouse doesn't notice. The zoom buttons only show
+     where the main pointer is a finger. */
+  #farm { touch-action: none; }
+  #zoomPad { display: none; }
+  @media (pointer: coarse) {
+    #zoomPad {
+      display: flex; flex-direction: column; gap: 8px;
+      position: absolute; right: 12px; bottom: 12px; z-index: 5;
+    }
+    #zoomPad button {
+      width: 44px; height: 44px; padding: 0; border-radius: 10px;
+      font-size: 22px; line-height: 1; background: rgba(20, 24, 33, .85);
+    }
+  }
+  .embed #zoomPad { display: none !important; }
+
   /* speed slider */
   #speed { width: 120px; accent-color: var(--accent); cursor: pointer; }
   .speedlabel {

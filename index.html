@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Phones render the page at their real width (desktop browsers ignore this). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Antfarm</title>
 <!-- Absolute, like the scripts: the page is served at / and at /play. -->
 <link rel="stylesheet" href="/style.css">
@@ -34,7 +36,14 @@
       <button id="btnHouse" title="Back to the farm everyone watches" hidden>Watch the house farm</button>
     </div>
     <div id="flash" hidden></div>
-    <div id="canvasWrap"><canvas id="farm"></canvas></div>
+    <div id="canvasWrap">
+      <canvas id="farm"></canvas>
+      <!-- Zoom buttons for touch screens; hidden with a mouse (see style.css). -->
+      <div id="zoomPad">
+        <button type="button" id="zoomIn" aria-label="Zoom in">+</button>
+        <button type="button" id="zoomOut" aria-label="Zoom out">&minus;</button>
+      </div>
+    </div>
   </div>
 
   <div id="side">

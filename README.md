@@ -613,6 +613,8 @@ farm still runs; it just won't survive a refresh.
 | `N` | show the nest blueprint and how far each chamber is dug |
 | scroll / drag | zoom / pan |
 | click an ant | inspect it |
+| pinch / one-finger drag | zoom / pan on a phone or tablet (plus + and − buttons) |
+| tap an ant | inspect it on a touch screen |
 
 Speed is a slider from 1× (real time) to 24× (keys `[` and `]` step it). The
 farm keeps running while the window is hidden.

@@ -648,8 +648,24 @@
 
     // 4. the old bedrock rim is interior ground now — it must be diggable, or
     //    the colony stays walled inside its original box
-    if (addLeft) for (let k = 0; k < 2; k++) openWall(addLeft + k);
-    if (addRight) for (let k = 0; k < 2; k++) openWall(addLeft + oldW - 1 - k);
+    //    The wall columns' ground line is pinned to row 1 (see rim), so first
+    //    give them the ground line of the real ground beside them. Opened as
+    //    they were, they became solid soil to the top of the jar: a thin pillar
+    //    at each old wall, drawn as a dark line down through the sky.
+    if (addLeft) {
+      for (let k = 0; k < 2; k++) {
+        surfY[addLeft + k] = oldBase[2];
+        baseY[addLeft + k] = oldBase[2];
+        openWall(addLeft + k);
+      }
+    }
+    if (addRight) {
+      for (let k = 0; k < 2; k++) {
+        surfY[addLeft + oldW - 1 - k] = oldBase[oldW - 3];
+        baseY[addLeft + oldW - 1 - k] = oldBase[oldW - 3];
+        openWall(addLeft + oldW - 1 - k);
+      }
+    }
     if (addDown) {
       for (let k = 0; k < 2; k++) {
         const y = oldH - 1 - k;
@@ -675,6 +691,7 @@
 
     world.dirty = true;
     world.fieldsStale = true;
+    lowerEdgePlateaus();        // belt and braces: nothing inside the farm stands to the top
     world.refreshSurface();
     return addLeft;
   };
