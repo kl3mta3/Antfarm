@@ -270,17 +270,47 @@
     }
   }
 
+  // Water as a shallow puddle lying on the ground, in the same chunky pixels as
+  // the ants. Water finds its level: the puddle has one surface, set by the
+  // ground where it was dropped, and each column of pixels only holds water
+  // where its ground lies below that surface. A bump that pokes above the water
+  // stays dry, and a dip holds a little more — never more than a few pixels, so
+  // nothing floats. Shallower toward the edges, darker at the rim, with one
+  // small glint that stays put. It shrinks as it's drunk.
   function drawPuddles() {
+    const q = 2 / ANT_RES;
     for (const p of col.puddles) {
-      const w = 1.2 + 3.2 * (p.amount / Math.max(1, p.max));
-      ctx.fillStyle = 'rgba(70,150,225,0.75)';
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y + 0.35, w, 0.75, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(160,215,255,0.5)';
-      ctx.beginPath();
-      ctx.ellipse(p.x - w * 0.25, p.y + 0.15, w * 0.35, 0.25, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const fill = Math.max(0, Math.min(1, p.amount / Math.max(1, p.max)));
+      const half = Math.max(2, Math.round((1 + 3.4 * fill) / q));   // half-width, in pixels
+      const deep = fill > 0.55 ? 3 : 2;                              // rows at the middle
+      const cx = Math.round(p.x / q) * q;
+      const seed = p.seed != null ? p.seed : p.x * 13.7;
+      const glint = Math.floor(((seed * 0.37) % 1) * half) - Math.floor(half / 2);
+      const level = Math.round(W.surfaceAt(p.x) / q) * q - deep * q;  // the water's surface
+
+      for (let j = -half; j < half; j++) {
+        const x = cx + j * q;
+        const ground = Math.round(W.surfaceAt(x + q / 2) / q) * q;
+        const across = Math.abs(j + 0.5) / half;                     // 0 at the middle, 1 at the rim
+        // Toward the edges the surface drops, so the puddle thins out.
+        const edgeDrop = Math.round((1 - Math.sqrt(Math.max(0, 1 - across * across))) * deep) * q;
+        const top = level + edgeDrop;
+        if (ground <= top) continue;                                 // dry: the ground is above the water
+        const rows = Math.min(deep + 1, Math.round((ground - top) / q));
+        if (rows < 1) continue;
+        const rim = j === -half || j === half - 1;
+
+        ctx.fillStyle = rim ? '#1f4a78' : '#2d64a0';
+        ctx.fillRect(x, ground - rows * q, q, rows * q);
+        if (!rim && rows > 1) {
+          ctx.fillStyle = '#4386c8';                                  // lighter surface of the water
+          ctx.fillRect(x, ground - rows * q, q, q);
+        }
+        if (j === glint) {
+          ctx.fillStyle = '#a9d4f2';
+          ctx.fillRect(x, ground - rows * q, q, q);
+        }
+      }
     }
   }
 
@@ -344,8 +374,8 @@
       if (nb) nb[A.caste[i]].push(i);
     }
 
-    // Close enough that one art pixel covers at least a screen pixel.
-    const detailed = s > 5;
+    // Close enough that the ant's pixels are about a screen pixel or larger.
+    const detailed = s > 6;
     const CASTE_KEY = AF.CASTE_KEY;
 
     for (let n = 0; n < nests.length; n++) {
@@ -363,9 +393,8 @@
         } else {
           const kind = c === CASTE.QUEEN ? 'queen' : c === CASTE.SOLDIER ? 'soldier' : 'worker';
           const hex = palette[CASTE_KEY[c]];
-          const colors = antColors(hex);
           for (const i of bucket) {
-            blit(kind, hex, colors, A.x[i], A.y[i], A.hd[i], (A.x[i] + A.y[i]) * 2.5);
+            blitAnt(kind, hex, A.x[i], A.y[i], A.hd[i], (A.x[i] + A.y[i]) * 2.5);
           }
         }
       }
@@ -380,7 +409,7 @@
         : cy === CARRY.WATER ? '#5aaee6'
         : cy === CARRY.EGG ? '#f0ead6' : '#8a6a48';
       // Held in the mandibles, on the same pixel grid as the ant.
-      const q = SPRITES.worker.px;
+      const q = 2 / ANT_RES;
       const hx = Math.round((A.x[i] + Math.cos(A.hd[i]) * 0.9) / q) * q;
       const hy = Math.round((A.y[i] + Math.sin(A.hd[i]) * 0.9) / q) * q;
       ctx.fillRect(hx - q, hy - q, q * 2, q * 2);
@@ -401,46 +430,6 @@
   // beetle: '*' sheen   '=' wing-case seam   'o' thorax and head   'm' mandibles
   const DIRS = 16;
   const SPRITES = {
-    worker: { px: 0.2, frames: [
-      ['..+..+.+.',
-       '.##.++##+',
-       '###.#####',
-       '.##.++##+',
-       '...+..+..'],
-      ['...+..+..',
-       '.##.++##+',
-       '###.#####',
-       '.##.++##+',
-       '..+..+.+.'],
-    ] },
-    soldier: { px: 0.2, frames: [
-      ['..+..+.+..',
-       '.##.++###+',
-       '###.######',
-       '.##.++###+',
-       '...+..+...'],
-      ['...+..+...',
-       '.##.++###+',
-       '###.######',
-       '.##.++###+',
-       '..+..+.+..'],
-    ] },
-    queen: { px: 0.2, frames: [
-      ['.....+..+.+..',
-       '.###..+.+..+.',
-       '#####.######.',
-       '#####.#######',
-       '#####.######.',
-       '.###..+.+..+.',
-       '....+..+..+..'],
-      ['....+..+..+..',
-       '.###..+.+..+.',
-       '#####.######.',
-       '#####.#######',
-       '#####.######.',
-       '.###..+.+..+.',
-       '.....+..+.+..'],
-    ] },
     beetle: { px: 0.25, frames: [
       ['...+....+.......',
        '....+...+...+...',
@@ -474,15 +463,117 @@
     'o': [35, 30, 40], '+': [122, 110, 136], 'm': [150, 116, 72],
   };
 
-  const antPalettes = new Map();
-  function antColors(hex) {
-    let c = antPalettes.get(hex);
-    if (!c) {
-      const rgb = hexToRgb(hex);
-      c = { '#': rgb, '+': rgb.map(v => Math.round(v * 0.62)) };
-      antPalettes.set(hex, c);
+  // Ants are a compromise between pixel art and drawing. A grid of a few pixels
+  // rotated to an angle turns into a blob, so instead each ant is drawn as a
+  // real shape — gaster, waist, thorax, head, jaws, six legs, elbowed antennae
+  // — at the angle it faces, into a small image at 8 pixels per tile. The
+  // pixels are then made hard-edged (no blur) and given a thin dark outline so
+  // a sand-coloured worker doesn't melt into sand. Up close you see square
+  // pixels, but they follow a proper ant outline at every heading. Baked per
+  // colour, walk frame and one of 24 headings, then cached.
+  const ANT_RES = 8;
+  const ANT_DIRS = 24;
+  const antCache = new Map();
+
+  function bakeAnt(kind, hex, frame, dir) {
+    const body = hexToRgb(hex);
+    const dark = body.map(v => Math.round(v * 0.5));
+    const rgb = c => 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+    const big = kind === 'queen' ? 1.6 : kind === 'soldier' ? 1.12 : 1;
+    const n = Math.ceil(3.2 * big * ANT_RES) + 4;
+
+    const cv = document.createElement('canvas');
+    cv.width = n; cv.height = n;
+    const g = cv.getContext('2d');
+    g.translate(n / 2, n / 2);
+    g.scale(ANT_RES * big, ANT_RES * big);
+    g.rotate(dir / ANT_DIRS * Math.PI * 2);
+
+    const blob = (x, y, rx, ry) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); g.fill(); };
+    function drawBody() {
+      g.fillStyle = rgb(body);
+      if (kind === 'queen') blob(-0.72, 0, 0.72, 0.42);  // gaster, long in a queen
+      else blob(-0.55, 0, 0.48, 0.36);
+      blob(-0.08, 0, 0.1, 0.08);                          // waist
+      blob(0.2, 0, 0.26, 0.16);                           // thorax
+      if (kind === 'soldier') blob(0.64, 0, 0.3, 0.3);    // head, big in a soldier
+      else blob(0.6, 0, 0.22, 0.2);
     }
-    return c;
+
+    // First the body alone, to know where its edge is: only the body gets the
+    // dark rim. Rimmed too, the thin legs turned thick and spiky.
+    drawBody();
+    const bodyMask = new Uint8Array(n * n);
+    {
+      const d0 = g.getImageData(0, 0, n, n).data;
+      for (let k = 0; k < n * n; k++) bodyMask[k] = d0[k * 4 + 3] >= 96 ? 1 : 0;
+    }
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, n, n);
+    g.restore();
+
+    // Legs, short and fine, in the alternating tripod: front and back on one
+    // side step with the middle leg on the other.
+    g.strokeStyle = rgb(dark);
+    g.lineWidth = 0.11;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.beginPath();
+    const step = frame ? 1 : -1;
+    const legs = [[0.28, 0.3], [0.14, 0], [0, -0.32]];   // [where it joins the thorax, forward reach]
+    legs.forEach(([rx, reach], k) => {
+      for (const side of [-1, 1]) {
+        const sw = ((k % 2 === 0) === (side > 0) ? step : -step) * 0.12;
+        const kx = rx + reach * 0.45 + sw * 0.5, ky = side * 0.36;
+        g.moveTo(rx, side * 0.1);
+        g.lineTo(kx, ky);
+        g.lineTo(kx + reach * 0.5 + sw, side * 0.62);
+      }
+    });
+    // antennae, elbowed
+    for (const side of [-1, 1]) {
+      g.moveTo(0.74, side * 0.1);
+      g.lineTo(0.9, side * 0.26);
+      g.lineTo(1.1, side * 0.2);
+    }
+    // jaws
+    const jx = kind === 'soldier' ? 0.9 : 0.78;
+    for (const side of [-1, 1]) { g.moveTo(jx, side * 0.08); g.lineTo(jx + 0.12, side * 0.02); }
+    g.stroke();
+
+    drawBody();
+
+    // Hard pixels, and a one-pixel dark rim round the body.
+    const img = g.getImageData(0, 0, n, n), d = img.data;
+    for (let k = 0; k < n * n; k++) d[k * 4 + 3] = d[k * 4 + 3] >= 110 ? 255 : 0;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const k = y * n + x;
+        if (bodyMask[k] || d[k * 4 + 3]) continue;
+        if ((x > 0 && bodyMask[k - 1]) || (x < n - 1 && bodyMask[k + 1]) ||
+            (y > 0 && bodyMask[k - n]) || (y < n - 1 && bodyMask[k + n])) {
+          const p = k * 4;
+          d[p] = 16; d[p + 1] = 12; d[p + 2] = 10; d[p + 3] = 170;
+        }
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  function blitAnt(kind, hex, x, y, hd, stride) {
+    const dir = ((Math.round(hd / (Math.PI * 2) * ANT_DIRS) % ANT_DIRS) + ANT_DIRS) % ANT_DIRS;
+    const frame = Math.floor(stride) & 1;
+    const key = kind + '|' + hex + '|' + frame + '|' + dir;
+    let cv = antCache.get(key);
+    if (!cv) {
+      cv = bakeAnt(kind, hex, frame, dir);
+      antCache.set(key, cv);
+    }
+    const size = cv.width / ANT_RES, q = 1 / ANT_RES;
+    // On the pixel grid, so it doesn't shimmer as it moves.
+    ctx.drawImage(cv, Math.round(x / q) * q - size / 2, Math.round(y / q) * q - size / 2, size, size);
   }
 
   function bakeSprite(frame, colors, dir) {
