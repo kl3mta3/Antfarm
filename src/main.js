@@ -30,8 +30,9 @@
     R.selected = -1;
     if (HOUSE) { houseAct({ type: 'new', queens }); return; }
     AF.persist.clear();
-    W.generate(queens || 1);
-    col.reset(queens || 1);
+    const q = queens == null ? 1 : queens;     // 0 is a real choice: bare ground
+    W.generate(q);
+    col.reset(q);
     R.fit();
     R.clampCam();
   }
@@ -411,9 +412,9 @@
 
   let queenCount = 1;
   const QUEEN_NOTES = [
-    '',
+    'No queens yet: just the ground. Use Add queen to place each one where you want her.',
     'One queen, one nest. The farm is hers alone.',
-    'Two nests, founded apart. They will meet — over food first, and over ground after.',
+    'Two nests, at opposite ends of the farm. They will meet — over food first, and over ground after.',
     'Three nests on one stretch of soil. Expect raids.',
   ];
 

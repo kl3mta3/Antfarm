@@ -520,6 +520,9 @@
 
     colony.piles = s.piles || [];
     colony.puddles = s.puddles || [];
+    // Food and water sit on the ground, wherever the ground is now.
+    for (const p of colony.piles) p.y = W.surfaceAt(p.x) - 0.6;
+    for (const p of colony.puddles) p.y = W.surfaceAt(p.x) - 0.4;
     colony.intruders = [];
   };
 
@@ -535,7 +538,7 @@
     colony.lifeTick = 0;
     for (let i = 0; i < N; i++) A.body[i] = null;
 
-    AF.nests.reset(queens || 1);
+    AF.nests.reset(queens == null ? 1 : queens);
 
     for (const nest of AF.nests.list) {
       const q = nest.founding;

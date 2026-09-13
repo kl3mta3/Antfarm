@@ -315,7 +315,8 @@ function createHouse({ root, dataFile, log = console.log }) {
         house.paused = false;
         return { ok: true };
       case 'new': {
-        const q = Math.max(1, Math.min(3, Math.round(Number(a.queens) || 1)));
+        const asked = Number(a.queens);
+        const q = Math.max(0, Math.min(3, Math.round(Number.isFinite(asked) ? asked : 1)));
         W.generate(q);
         col.reset(q);
         lastTiles = null;                // everyone gets a fresh keyframe

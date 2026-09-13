@@ -1796,28 +1796,32 @@
   }
 
   function spawnIntruder() {
+    if (!NS.living().length) return;       // nothing to raid yet
     const x = Math.random() < 0.5 ? 6 + Math.random() * 20 : C.W - 26 + Math.random() * 20;
     col.intruders.push({
       x, y: W.surfaceAt(x) - 0.6,
       hp: C.INTRUDER_HP, max: C.INTRUDER_HP,
       hd: 0, timer: 0,
-      target: NS.living()[0] || NS.get(0),
+      target: NS.living()[0],
     });
   }
 
   function stepIntruders() {
+    // With no nest left (or none yet), a beetle has nowhere to go: it leaves.
+    const home = NS.living()[0];
+    if (!home) { col.intruders.length = 0; return; }
     for (let k = col.intruders.length - 1; k >= 0; k--) {
       const t = col.intruders[k];
       if (t.timer > C.INTRUDER_PATIENCE) { col.intruders.splice(k, 1); continue; }
       if (t.hp <= 0) {
         // A dead beetle is a windfall for whoever brought it down.
-        const nest = t.target && t.target.alive ? t.target : (NS.living()[0] || NS.get(0));
+        const nest = t.target && t.target.alive ? t.target : home;
         nest.res.biomass += 14;
         nest.res.food += 10;
         col.intruders.splice(k, 1);
         continue;
       }
-      const nest = t.target && t.target.alive ? t.target : (NS.living()[0] || NS.get(0));
+      const nest = t.target && t.target.alive ? t.target : home;
       const above = t.y < W.surfaceAt(t.x) - 0.25;
       if (above) {
         const dx = nest.entrance.x - t.x;

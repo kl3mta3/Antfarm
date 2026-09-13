@@ -87,7 +87,7 @@
     nodeSeq = 0;
     nests.list = [];
     const starts = W.starts || [];
-    const n = Math.max(1, Math.min(starts.length || 1, howMany || 1));
+    const n = Math.max(0, Math.min(starts.length, howMany == null ? 1 : howMany));
     for (let i = 0; i < n; i++) nests.list.push(makeNest(i, starts[i]));
     nests.ready = true;
     W.fieldsStale = true;
@@ -113,7 +113,8 @@
     if (why) return { ok: false, error: why };
 
     const start = W.carveStart(Math.round(x));
-    W.starts.push(start);
+    // The start list isn't saved, so a farm that was reloaded has none yet.
+    (W.starts || (W.starts = [])).push(start);
     const nest = makeNest(nests.list.length, start);
     nests.list.push(nest);
 
@@ -683,6 +684,12 @@
       nest.alive = s.alive !== false;
       if (s.entrances && s.entrances.length) {
         nest.entrances = s.entrances.map(e => ({ x: e.x, y: e.y }));
+      }
+      // If the ground under a door was lowered on load (see lowerEdgePlateaus),
+      // bring the door down with it rather than leave it hanging in the air.
+      for (const e of [nest.entrance, ...nest.entrances]) {
+        const ground = W.surfaceAt(e.x) + 1.5;
+        if (e.y < ground - 1) e.y = ground;
       }
       nest.plan = s.plan.map(p => {
         const node = {

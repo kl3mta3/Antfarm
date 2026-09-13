@@ -100,7 +100,8 @@
 
   world.generate = function (nests) {
     const seed = Math.random() * 100;
-    nests = Math.max(1, Math.min(3, nests || 1));
+    // 0 is allowed: bare ground, with queens placed by hand afterwards.
+    nests = Math.max(0, Math.min(3, nests == null ? 1 : Math.round(nests)));
     if (W !== BASE_W || H !== BASE_H) {
       allocate(BASE_W, BASE_H);        // a new farm starts small again
       if (AF.render && AF.render.worldResized) AF.render.worldResized(0);
@@ -143,12 +144,13 @@
     for (let i = 0; i < shade.length; i++) shade[i] = (Math.random() * 24) | 0;
     baseY.set(surfY);   // remember the untouched ground line
 
-    // Space the founding sites evenly, well clear of the walls and of each
-    // other, so the nests start as strangers rather than neighbours.
+    // As far apart as the farm allows: one queen in the middle, two at
+    // opposite ends, three at both ends and the middle. They start as
+    // strangers with the whole farm between them.
     world.starts = [];
     const span = W - 80;
     for (let k = 0; k < nests; k++) {
-      const frac = (k + 1) / (nests + 1);
+      const frac = nests === 1 ? 0.5 : k / (nests - 1);
       const ex = Math.round(40 + span * frac);
       world.starts.push(carveStart(ex));
     }
@@ -627,7 +629,10 @@
     }
 
     // 2. new ground to the sides, continuing the profile at the edge
-    const leftBase = oldSurf[0], rightBase = oldSurf[oldW - 1];
+    // Continue from the first real ground in from each wall. The wall columns
+    // themselves are pinned to row 1 (see rim), and continuing from those put
+    // the new ground almost at the top of the jar — a sheer wall at each edge.
+    const leftBase = oldBase[2], rightBase = oldBase[oldW - 3];
     for (let x = 0; x < addLeft; x++) fillColumn(x, leftBase, addLeft - x);
     for (let x = 0; x < addRight; x++) fillColumn(newW - addRight + x, rightBase, x + 1);
 
@@ -726,6 +731,34 @@
     for (const x of [0, 1, W - 2, W - 1]) { surfY[x] = 1; baseY[x] = 1; }
   }
 
+  // Farms that widened before that fix have a slab of ground at each edge
+  // standing almost to the top of the jar. Natural ground never rises more
+  // than a few rows above the sky line, so anything far above it is one of
+  // those slabs: lower it to the nearest real ground. Only solid ground above
+  // that height goes; tunnels are left alone.
+  function lowerEdgePlateaus() {
+    const ceiling = C.SKY - 12;
+    let fixed = 0;
+    for (let x = 2; x < W - 2; x++) {
+      if (baseY[x] >= ceiling) continue;
+      let target = -1;
+      for (let d = 1; d < W && target < 0; d++) {
+        for (const nx of [x - d, x + d]) {
+          if (nx < 2 || nx >= W - 2 || baseY[nx] < ceiling) continue;
+          target = baseY[nx];
+          break;
+        }
+      }
+      if (target < 0) target = C.SKY;
+      for (let y = 0; y < target; y++) tiles[y * W + x] = T.AIR;
+      surfY[x] = target;
+      baseY[x] = target;
+      fixed++;
+    }
+    return fixed;
+  }
+  world.lowerEdgePlateaus = lowerEdgePlateaus;
+
   // ------------------------------------------------------------ save / load
 
   function toB64(u8) {
@@ -770,6 +803,8 @@
     }
     // shade is cosmetic noise; regenerate rather than store 36KB of it
     for (let i = 0; i < shade.length; i++) shade[i] = (Math.random() * 24) | 0;
+
+    lowerEdgePlateaus();
 
     world.caches = (s.caches || []).map(c => ({ x: c.x, y: c.y, r: c.r, tiles: c.tiles }));
     world.rebuildCacheScent();
