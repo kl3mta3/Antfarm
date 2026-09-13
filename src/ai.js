@@ -923,6 +923,13 @@
               W.refreshColumn(tx);
               nest.stats.tilesDug++;
               A.stuck[i] = 0;
+              // Every cut counts as work on the room this digger is headed for,
+              // including the tunnel it cuts to reach it. Only tiles inside a
+              // room used to count, so with slow cuts a room timed out while
+              // its digger was still tunnelling toward it: 9 of 11 rooms were
+              // written off, most with nothing dug, and the larder never moved.
+              const site = A.node[i] >= 0 ? nest.plan[A.node[i]] : null;
+              if (site) site.bored = (site.bored || 0) + 1;
 
               if (struckFood) {
                 // Broke into something worth eating. Spoil can wait — this
@@ -1931,7 +1938,9 @@
         // take them; left uncounted, a dead shaft stayed "outstanding" forever
         // and blocked the colony from ever siting another.
         n.idleTicks = (n.idleTicks || 0) + REVIEW_EVERY;
-        const limit = n.opportunistic ? 9000 : 6000;
+        // Doubled when cuts got slow (DIG_SLOW): a digger can go a long while
+        // between cuts once a spoil haul and a meal fall in the same stretch.
+        const limit = (n.opportunistic ? 9000 : 6000) * 2;
         if (n.idleTicks > limit) {
           n.built = 1;
           if (p < doneEnough(n)) n.abandoned = true;   // genuinely unreachable
