@@ -15,6 +15,26 @@
   const TAU = Math.PI * 2;
 
   const sim = { paused: false, speed: 1 };
+
+  // How far the life clock moves per movement tick. At 1× a colony day
+  // (DAY_TICKS) takes a real day of movement ticks.
+  sim.lifeRate = function () {
+    return sim.speed * C.DAY_TICKS / (86400 * C.BASE_HZ);
+  };
+  let LIFE = sim.lifeRate();      // refreshed every tick
+  let lifeBefore = 0;
+
+  // True on the tick the life clock passes a multiple of n, however slowly
+  // it's moving. Life-paced schedules use this instead of `tick % n`.
+  function lifeEvery(n) {
+    return Math.floor(col.lifeTick / n) !== Math.floor(lifeBefore / n);
+  }
+
+  // How long one cut takes, in movement ticks: between the two clocks. Slow
+  // and deliberate at real time, brisker as life speeds up (see DIG_SLOW).
+  function digTicks() {
+    return Math.round(C.DIG_TICKS * Math.max(1, C.DIG_SLOW / Math.sqrt(sim.speed)));
+  }
   AF.sim = sim;
 
   const nestOf = i => NS.get(A.nest[i]);
@@ -247,7 +267,7 @@
   function canGetHome(i, nest) {
     const away = Math.abs(A.x[i] - nest.entrance.x);
     const ticksHome = away / Math.max(0.02, A.spd[i]);
-    const needed = ticksHome * C.THIRST_DRAIN * C.RETURN_MARGIN + C.RETURN_RESERVE;
+    const needed = ticksHome * C.THIRST_DRAIN * LIFE * C.RETURN_MARGIN + C.RETURN_RESERVE;
     return A.hydration[i] > needed;
   }
 
@@ -365,22 +385,24 @@
 
   function metabolism(i) {
     const caste = A.caste[i];
-    const rate = caste === CASTE.QUEEN ? 0.55 : 1;
-    A.age[i] += 1;
+    // All on the life clock: an ant walks at the same pace at any speed, but
+    // ages, tires and thirsts by colony time.
+    const rate = (caste === CASTE.QUEEN ? 0.55 : 1) * LIFE;
+    A.age[i] += LIFE;
     A.energy[i] -= C.ENERGY_DRAIN * rate;
     A.hydration[i] -= C.THIRST_DRAIN * rate;
 
     if (A.energy[i] <= 0) {
       A.energy[i] = 0;
-      A.health[i] -= 0.085;
+      A.health[i] -= 0.085 * LIFE;
       if (col.tick % 240 === 0) col.log(i, 14);
     }
     if (A.hydration[i] <= 0) {
       A.hydration[i] = 0;
-      A.health[i] -= C.DEHYDRATION_DAMAGE;
+      A.health[i] -= C.DEHYDRATION_DAMAGE * LIFE;
       if (col.tick % 240 === 0) col.log(i, 18);
     }
-    if (A.energy[i] > 60 && A.hydration[i] > 60 && A.health[i] < 100) A.health[i] += 0.02;
+    if (A.energy[i] > 60 && A.hydration[i] > 60 && A.health[i] < 100) A.health[i] += 0.02 * LIFE;
 
     if (A.health[i] <= 0) {
       col.killAnt(i, A.hydration[i] <= 0 ? 'thirst' : A.energy[i] <= 0 ? 'starve' : 'killed');
@@ -596,7 +618,7 @@
     n.bored = (n.bored || 0) + 1;
     A.digTile[i] = tile;
     setState(i, ST.DIGGING);
-    A.timer[i] = C.DIG_TICKS;
+    A.timer[i] = digTicks();
     col.log(i, 3);
   }
 
@@ -717,7 +739,7 @@
           }
           A.digTile[i] = tile;
           setState(i, ST.DIGGING);
-          A.timer[i] = C.DIG_TICKS;
+          A.timer[i] = digTicks();
           col.log(i, 3);
         } else {
           digToward(i, n.x, n.y);
@@ -858,7 +880,7 @@
     if (W.isDiggable(t)) {
       A.digTile[i] = fy * C.W + fx;
       setState(i, ST.DIGGING);
-      A.timer[i] = C.DIG_TICKS;
+      A.timer[i] = digTicks();
       col.log(i, 3);
       return;
     }
@@ -876,7 +898,7 @@
       if (W.isDiggable(st)) {
         A.digTile[i] = sy * C.W + sx;
         setState(i, ST.DIGGING);
-        A.timer[i] = C.DIG_TICKS;
+        A.timer[i] = digTicks();
         col.log(i, 3);
         return;
       }
@@ -1268,15 +1290,15 @@
     // and no workers left to fill it she lives off body reserves, the way a
     // founding queen sealed in a chamber does.
     if (A.energy[i] < 70) {
-      if (nest.res.food > 2) { nest.res.food -= 0.02; A.energy[i] += 0.25; }
-      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05; A.energy[i] += 0.25; }
+      if (nest.res.food > 2) { nest.res.food -= 0.02 * LIFE; A.energy[i] += 0.25 * LIFE; }
+      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.energy[i] += 0.25 * LIFE; }
     }
     if (A.hydration[i] < 70) {
-      if (nest.res.water > 2) { nest.res.water -= 0.02; A.hydration[i] += 0.25; }
-      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05; A.hydration[i] += 0.25; }
+      if (nest.res.water > 2) { nest.res.water -= 0.02 * LIFE; A.hydration[i] += 0.25 * LIFE; }
+      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.hydration[i] += 0.25 * LIFE; }
     }
 
-    A.timer[i]++;
+    A.timer[i] += LIFE;                  // laying keeps colony time
     const plenty = nest.res.food > 70 && nest.res.water > 50;
     const rebuilding = nest.count < 16;
     const interval = C.EGG_INTERVAL * (plenty || rebuilding ? 1 : 2.5);
@@ -1317,8 +1339,8 @@
   // in the same position do not always do the same thing.
   function reviewPolicy(nest) {
     const p = nest.policy;
-    if (col.tick - p.timer < C.POLICY_REVIEW) return;
-    p.timer = col.tick;
+    if (col.lifeTick - p.timer < C.POLICY_REVIEW) return;
+    p.timer = col.lifeTick;
 
     let unbuilt = 0, rooms = 0;
     for (const n of nest.plan) {
@@ -1482,7 +1504,7 @@
 
       const st = B.stage[b];
       if (st === 0) {
-        B.t[b] += 1;
+        B.t[b] += LIFE;
         if (B.t[b] >= C.EGG_T) {
           nest.broodPop[0]--; nest.broodPop[1]++;
           B.stage[b] = 1; B.t[b] = 0; B.fed[b] = 40;
@@ -1491,18 +1513,18 @@
         // Last resort: a colony down to the queen has nobody left to forage,
         // so she metabolises the corpse pool into a starter crew.
         if (B.fed[b] <= 0 && nest.count <= 3 && nest.res.biomass > 15) {
-          B.fed[b] += 14;
-          nest.res.biomass -= 0.4;
+          B.fed[b] += 14 * LIFE;
+          nest.res.biomass -= 0.4 * LIFE;
         }
-        if (B.fed[b] > 0) { B.fed[b] -= C.LARVA_BURN; B.t[b] += 1; }
-        else B.t[b] -= 0.12;
+        if (B.fed[b] > 0) { B.fed[b] -= C.LARVA_BURN * LIFE; B.t[b] += LIFE; }
+        else B.t[b] -= 0.12 * LIFE;
         if (B.t[b] < -900) { col.killBrood(b); continue; }
         if (B.t[b] >= C.LARVA_T) {
           nest.broodPop[1]--; nest.broodPop[2]++;
           B.stage[b] = 2; B.t[b] = 0;
         }
       } else {
-        B.t[b] += 1;
+        B.t[b] += LIFE;
         if (B.t[b] >= C.PUPA_T) {
           // Queenless but still strong enough to carry on: raise a new queen.
           const caste = (nest.queen < 0 && nest.count >= 5)
@@ -1751,10 +1773,10 @@
     }
     for (let k = col.puddles.length - 1; k >= 0; k--) {
       const p = col.puddles[k];
-      p.amount -= C.EVAPORATION;
+      p.amount -= C.EVAPORATION * LIFE;
       if (p.amount <= 0.01) col.puddles.splice(k, 1);
     }
-    if (C.WILD_FOOD && col.tick % C.WILD_FOOD_EVERY === 0) {
+    if (C.WILD_FOOD && lifeEvery(C.WILD_FOOD_EVERY)) {
       const x = 8 + Math.random() * (C.W - 16);
       col.addPile(x, W.surfaceAt(x) - 0.6);
     }
@@ -1837,6 +1859,9 @@
 
   sim.tick = function () {
     col.tick++;
+    LIFE = sim.lifeRate();
+    lifeBefore = col.lifeTick;
+    col.lifeTick += LIFE;
 
     W.decayPheromones();
     AF.grid.rebuild();
@@ -1855,14 +1880,14 @@
     if (col.tick % 45 === 0) refreshBroodLists();
     if (col.tick % 240 === 0) for (const n of NS.list) if (n.alive) rebalanceLabour(n);
     if (col.tick % REVIEW_EVERY === 0) for (const n of NS.list) if (n.alive) reviewDigSites(n);
-    if (col.tick % C.ERODE_EVERY === 0) W.erode(C.ERODE_SAMPLES);
+    if (lifeEvery(C.ERODE_EVERY)) W.erode(C.ERODE_SAMPLES);        // weather keeps colony time
     if (col.tick % C.FIELD_REBUILD_EVERY === 0 && W.fieldsStale) NS.rebuildFields();
     if (col.tick % 600 === 0) for (const n of NS.list) if (n.alive) NS.expandPlan(n);
     if (col.tick % 200 === 0) for (const n of NS.list) if (n.alive) NS.checkEntrances(n);
     if (col.tick % 300 === 0) for (const n of NS.list) if (n.alive) reviewPolicy(n);
     if (col.tick % 900 === 0) considerExpansion();
     if (col.tick % 400 === 0) settleEstates();
-    if (col.tick % C.INTRUDER_EVERY === 0 && col.count > 25) spawnIntruder();
+    if (lifeEvery(C.INTRUDER_EVERY) && col.count > 25) spawnIntruder();
   };
 
   // ------------------------------------------------------- inspector wording

@@ -53,9 +53,8 @@ evaporate, and nothing replaces them but you.
 - **Drop water** — same, blue puddle. Water drains faster than food, and an
   unwatered farm always dies of thirst first.
 - **Auto-tend** — hand the job back to the farm. It keeps food and water topped
-  up in proportion to the colony's size, in drops that also scale with it, and
-  restocks on a tick count rather than a wall clock, so the ration holds at 10×
-  as well as at 1×.
+  up in proportion to the colony's size, in drops that also scale with it. It
+  restocks whenever the stores run low, so the ration holds at any speed.
 
 **Water goes near the entrance; food gets scattered.** That split is deliberate.
 Thirst kills faster than hunger, so a reliable drink is what makes a long search
@@ -392,7 +391,7 @@ Also on the server side:
 - **Rate limits.** At most 40 changes per 10 seconds per session. A wrong
   password costs a 400 ms wait, which blunts guessing.
 - **Validated input.** Actions are checked for shape and range: a drop must be
-  on the farm, a speed must be one of 1×, 3× or 10×.
+  on the farm, a speed must be one of the slider's stops.
 - **Sessions end on restart.** They're held in memory, and last 72 hours by
   default (`ANTFARM_SESSION_HOURS`).
 
@@ -513,19 +512,62 @@ entrance shaft running up through it.
 
 ## How fast is 1×?
 
-20 ticks per second, measured at exactly 20.00 — a hundredth of a percent drift.
-At that pace a colony day is nine real minutes and a worker lives somewhere
-between eight and thirty-eight, which is about right for something you watch
-rather than something you scrub through. `3×` and `10×` are there for when you
-want to see the nest actually get dug.
+**Real time: a day in the farm is a day out here.**
 
-The loop takes fixed steps against the wall clock, so it holds that pace whether
+The farm runs two clocks.
+
+- **Movement** always runs at 20 ticks a second. Walking, carrying, digging a
+  tile and fighting look the same at every speed.
+- **Life** is everything biological: ageing, hunger and thirst, eggs and larvae
+  growing, the queen laying, bodies rotting, puddles drying, the weather wearing
+  down the spoil heap, and how often beetles turn up. It runs on its own clock,
+  where `DAY_TICKS` make one colony day. At 1× that day takes a real day.
+
+The **speed slider** only moves the life clock. It locks onto stops from 1× up
+to 24×, where a colony day passes in an hour (`[` and `]` step it). The ants
+don't rush about at 24×; they just live their lives faster.
+
+**Digging sits between the two clocks.** Walking to the face and carrying spoil
+out keep movement pace, but cutting a tile loose is slow. It takes about 66
+seconds at 1×, shrinking with the square root of the speed to about 13 seconds
+at 24× (`DIG_SLOW`). The cut has to be that slow to matter: a digger's trip out
+with the spoil takes about 30 seconds, and anything shorter left the cut a small
+part of the cycle. Measured on a new colony:
+
+| | Tiles dug per real minute |
+|---|---|
+| Before (a cut every second) | 32.7 |
+| 1× | 2.3 |
+| 24× | 9 |
+
+A farm takes a long time to dig out, as a real one would.
+
+Because life is slow, the numbers are realistic-ish:
+
+| | Colony time |
+|---|---|
+| Worker lifespan | 30–120 days |
+| Queen lifespan | 10 years |
+| Egg laid | about every 2.4 hours, around ten a day |
+| Egg to adult | 3 days |
+
+Real ants take six to eight weeks to go from egg to adult. Three days is the one
+place the farm cheats, so a new farm shows its first brood coming through at the
+faster speeds. With workers living months, each one does far more work, and the
+queen needs far fewer eggs to keep the colony going.
+
+One thing deliberately stays on the movement clock: how quickly a queen forgets
+the scent of neighbours. Her workers spot strangers at walking pace, and if the
+forgetting slowed 160× while the sightings didn't, every queen would be on
+maximum alert forever.
+
+Ages are 64-bit numbers. At 1× an ant ages a tiny fraction of a tick per
+movement tick, and in 32-bit floats that step rounds away to nothing after about
+ten colony days; a months-long life would simply stop ageing.
+
+The loop takes fixed steps against the wall clock, so it holds its pace whether
 the page renders at 60fps or 30, and a long stall (a sleeping laptop) is dropped
-rather than fast-forwarded. There is plenty of headroom — a full tick with a
-hundred ants costs about 0.28 ms, roughly 60× the budget.
-
-All biology is counted in ticks, so `BASE_HZ` in `config.js` rescales the whole
-clock without disturbing the balance.
+rather than fast-forwarded.
 
 ## It remembers
 
@@ -548,8 +590,8 @@ farm still runs; it just won't survive a refresh.
 | scroll / drag | zoom / pan |
 | click an ant | inspect it |
 
-Speed runs at 1×, 3× or 10× (keys `1`, `2`, `3`). The farm keeps running while
-the window is hidden.
+Speed is a slider from 1× (real time) to 24× (keys `[` and `]` step it). The
+farm keeps running while the window is hidden.
 
 ## Files
 

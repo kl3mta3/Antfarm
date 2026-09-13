@@ -12,9 +12,9 @@
     <div id="toolbar">
       <button id="btnPause" class="keeper">Pause</button>
       <span class="tblabel keeper">Speed</span>
-      <button class="spd keeper" data-s="1">1&times;</button>
-      <button class="spd keeper" data-s="3">3&times;</button>
-      <button class="spd keeper" data-s="10">10&times;</button>
+      <input id="speed" class="keeper" type="range" min="0" max="8" step="1" value="0"
+             title="How fast colony life runs. Ants always move at the same pace. [ and ] step it.">
+      <span id="speedLabel" class="speedlabel keeper">1× · real time</span>
       <span class="sep keeper"></span>
       <span class="tblabel keeper">Caretaker</span>
       <button id="btnFood" class="food keeper">Drop food</button>

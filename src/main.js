@@ -5,7 +5,7 @@
 
   const TICK_HZ = C.BASE_HZ;
   const STEP_MS = 1000 / TICK_HZ;
-  const TICKS_PER_DAY = 10800;      // a colony day, nine real minutes at 1x
+  const TICKS_PER_DAY = C.DAY_TICKS;    // a colony day, on the life clock
 
   const canvas = document.getElementById('farm');
   const $ = id => document.getElementById(id);
@@ -137,13 +137,11 @@
     acc += dt;
     let budget = 0;
     while (acc >= STEP_MS && budget < maxSteps) {
-      for (let s = 0; s < sim.speed; s++) {
-        sim.tick();
-        tickCounter++;
-        // Tending is counted in ticks, not seconds, so the colony gets the
-        // same ration per unit of its own life at any speed setting.
-        if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; tend(); }
-      }
+      // One movement tick per step at every speed; the speed setting moves
+      // only the life clock (see sim.lifeRate).
+      sim.tick();
+      tickCounter++;
+      if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; tend(); }
       acc -= STEP_MS;
       budget++;
     }
@@ -274,9 +272,12 @@
     if (k === ' ') { e.preventDefault(); togglePause(); }
     else if (k === 'f') setTool(tool === 'food' ? 'select' : 'food');
     else if (k === 'w') setTool(tool === 'water' ? 'select' : 'water');
-    else if (k === '1') setSpeed(1);
-    else if (k === '2') setSpeed(3);
-    else if (k === '3') setSpeed(10);
+    else if (k === '[' || k === ']') {
+      const stops = C.SPEED_STOPS;
+      const cur = HOUSE ? AF.mirror.controls.speed : sim.speed;
+      const at = Math.max(0, stops.indexOf(cur));
+      setSpeed(stops[Math.max(0, Math.min(stops.length - 1, at + (k === ']' ? 1 : -1)))]);
+    }
   });
 
   // ----------------------------------------------------------------- toolbar
@@ -331,9 +332,12 @@
   }
 
   $('btnPause').onclick = guard(togglePause);
-  document.querySelectorAll('.spd').forEach(b => {
-    b.onclick = guard(() => setSpeed(parseInt(b.dataset.s, 10)));
-  });
+  // Speed: a slider from real time up to 24×, locking onto each stop. The
+  // label follows while dragging; the speed changes when it's let go.
+  const slider = $('speed');
+  slider.max = String(C.SPEED_STOPS.length - 1);
+  slider.oninput = () => { $('speedLabel').textContent = speedText(C.SPEED_STOPS[+slider.value]); };
+  slider.onchange = guard(() => { setSpeed(C.SPEED_STOPS[+slider.value]); slider.blur(); });
   $('btnFood').onclick = guard(() => setTool(tool === 'food' ? 'select' : 'food'));
   $('btnWater').onclick = guard(() => setTool(tool === 'water' ? 'select' : 'water'));
   $('btnAuto').onclick = guard(() => {
@@ -448,9 +452,10 @@
     const speed = HOUSE ? AF.mirror.controls.speed : sim.speed;
     $('btnPause').textContent = paused ? 'Resume' : 'Pause';
     $('btnPause').classList.toggle('on', paused);
-    document.querySelectorAll('.spd').forEach(b => {
-      b.classList.toggle('on', !paused && speed === parseInt(b.dataset.s, 10));
-    });
+    if (document.activeElement !== $('speed')) {
+      $('speed').value = String(Math.max(0, C.SPEED_STOPS.indexOf(speed)));
+      $('speedLabel').textContent = speedText(speed);
+    }
     $('btnFood').classList.toggle('on', tool === 'food');
     $('btnWater').classList.toggle('on', tool === 'water');
     $('btnAuto').classList.toggle('on', HOUSE ? AF.mirror.controls.autoTend : autoTend);
@@ -499,9 +504,26 @@
     renderAntCard(false);
   }
 
+  // "1× · real time", "6× · a day in 4 h", "24× · a day in 1 h"
+  function speedText(s) {
+    if (s === 1) return '1× · real time';
+    const h = 24 / s;
+    return s + '× · a day in ' + (Number.isInteger(h) ? h : h.toFixed(1)) + ' h';
+  }
+
+  // A span of colony time, in the largest unit that reads naturally.
+  function lifeText(t) {
+    const days = t / TICKS_PER_DAY;
+    if (days >= 1) return (days < 10 ? days.toFixed(1) : Math.round(days)) + ' days';
+    const hours = days * 24;
+    if (hours >= 1) return hours.toFixed(1) + ' h';
+    return Math.max(1, Math.round(hours * 60)) + ' min';
+  }
+
   function clockText() {
-    const day = Math.floor(col.tick / TICKS_PER_DAY) + 1;
-    const inDay = col.tick % TICKS_PER_DAY;
+    const now = col.lifeTick || 0;
+    const day = Math.floor(now / TICKS_PER_DAY) + 1;
+    const inDay = now % TICKS_PER_DAY;
     const hh = Math.floor(inDay / (TICKS_PER_DAY / 24));
     const mm = Math.floor((inDay % (TICKS_PER_DAY / 24)) / (TICKS_PER_DAY / 1440));
     // Real character, not an HTML entity — this is written with textContent.
@@ -681,7 +703,7 @@
       '<div class="row"><span class="k">Carrying</span><span class="v">' +
         AF.CARRY_NAME[A.carry[i]] + '</span></div>' +
       '<div class="row"><span class="k">Age</span><span class="v">' +
-        Math.round(A.age[i] / TICK_HZ) + 's of ~' + Math.round(A.life[i] / TICK_HZ) + 's</span></div>' +
+        lifeText(A.age[i]) + ' of ~' + lifeText(A.life[i]) + '</span></div>' +
       '<div class="bar"><i style="width:' + lifePct + '%;background:#7b8aa5"></i></div>' +
       '<div class="row"><span class="k">Position</span><span class="v">' +
         A.x[i].toFixed(0) + ', ' + A.y[i].toFixed(0) +

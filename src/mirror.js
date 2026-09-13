@@ -152,6 +152,7 @@
     for (const [x, y, nest, held, age] of f.corpses) col.corpses.push({ x, y, nest, held: held ? 0 : -1, age });
     col.intruders = f.intruders;
     col.tick = f.tick;
+    if (f.life != null) col.lifeTick = f.life;
     setControls(f.house);
 
     const now = performance.now();

@@ -356,7 +356,7 @@
 
             <div class="rules">
               <div class="rule"><div class="rule-num">01</div><div><strong>Drop food and water.</strong><span>Or switch on auto-tend and let it scatter rations near each nest. Thirst kills faster than hunger.</span></div></div>
-              <div class="rule"><div class="rule-num">02</div><div><strong>Real time means real time.</strong><span>At 1× a colony day takes about nine minutes. 3× and 10× exist for the impatient.</span></div></div>
+              <div class="rule"><div class="rule-num">02</div><div><strong>Real time means real time.</strong><span>At 1× a day in the farm is a day out here. Slide it up to 24× and a colony day passes in an hour; the ants still walk at their own pace.</span></div></div>
               <div class="rule"><div class="rule-num">03</div><div><strong>Read the trails.</strong><span>Turn on pheromones to see each colony’s paths in its own colour, and where two of them overlap.</span></div></div>
               <div class="rule"><div class="rule-num">04</div><div><strong>Follow an ant.</strong><span>Its goal, its thoughts, what it’s carrying, how far it has walked and how much longer it has.</span></div></div>
               <div class="rule"><div class="rule-num">05</div><div><strong>Expect war.</strong><span>Put two queens on one stretch of soil and give them time. It’s probably not your fault.</span></div></div>
@@ -421,7 +421,7 @@
       async function refresh(){
         try {
           const s = await (await fetch(APP + "/api/house/status", { cache: "no-store" })).json();
-          const day = Math.floor(s.tick / TICKS_PER_DAY) + 1;
+          const day = s.day != null ? s.day : Math.floor(s.tick / TICKS_PER_DAY) + 1;
           text.textContent = s.ants.toLocaleString() + " ants · " + s.nests + (s.nests === 1 ? " nest" : " nests") +
             " · day " + day + (s.paused ? " · paused" : "");
           dot.classList.remove("off");

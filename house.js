@@ -44,7 +44,7 @@ function createHouse({ root, dataFile, log = console.log }) {
       col.loadState(data.colony);
       if (data.house) {
         house.autoTend = data.house.autoTend !== false;
-        house.speed = [1, 3, 10].includes(data.house.speed) ? data.house.speed : 1;
+        house.speed = C.SPEED_STOPS.includes(data.house.speed) ? data.house.speed : 1;
         house.paused = !!data.house.paused;
       }
       log('House farm restored: tick ' + col.tick + ', ' + col.count + ' ants.');
@@ -110,17 +110,17 @@ function createHouse({ root, dataFile, log = console.log }) {
     let steps = 0;
     const t0 = process.hrtime.bigint();
     let ticks = 0;
+    // One movement tick per step at every speed; speed moves only the life clock.
+    sim.speed = house.speed;
     while (acc >= STEP_MS && steps < 40) {
-      for (let s = 0; s < house.speed; s++) {
-        try {
-          sim.tick();
-        } catch (e) {
-          // One bad tick must not take the farm down for everyone watching.
-          if (failures++ < 5) log('House farm tick failed: ' + (e.stack || e));
-        }
-        ticks++;
-        if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; if (house.autoTend) tend(); }
+      try {
+        sim.tick();
+      } catch (e) {
+        // One bad tick must not take the farm down for everyone watching.
+        if (failures++ < 5) log('House farm tick failed: ' + (e.stack || e));
       }
+      ticks++;
+      if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; if (house.autoTend) tend(); }
       acc -= STEP_MS;
       steps++;
     }
@@ -235,6 +235,7 @@ function createHouse({ root, dataFile, log = console.log }) {
 
     const out = {
       tick: col.tick,
+      life: col.lifeTick,
       ants: packAnts(),
       brood: packBrood(),
       piles: col.piles.map(p => [r2(p.x), r2(p.y), r2(p.amount), r2(p.seed || 0)]),
@@ -306,7 +307,7 @@ function createHouse({ root, dataFile, log = console.log }) {
         house.paused = !!a.paused;
         return { ok: true };
       case 'speed':
-        if (![1, 3, 10].includes(a.speed)) return { ok: false, error: 'Unknown speed.' };
+        if (!C.SPEED_STOPS.includes(a.speed)) return { ok: false, error: 'Unknown speed.' };
         house.speed = a.speed;
         house.paused = false;
         return { ok: true };
@@ -324,7 +325,8 @@ function createHouse({ root, dataFile, log = console.log }) {
 
   house.status = function () {
     return {
-      tick: col.tick, ants: col.count, nests: NS.list.filter(n => n.alive).length,
+      tick: col.tick, day: Math.floor(col.lifeTick / C.DAY_TICKS) + 1,
+      ants: col.count, nests: NS.list.filter(n => n.alive).length,
       tickMs: Math.round(house.tickMs * 1000) / 1000, ...controls(),
     };
   };

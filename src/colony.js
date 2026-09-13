@@ -14,7 +14,10 @@
     hd: new Float32Array(N), spd: new Float32Array(N),
     caste: new Uint8Array(N), state: new Uint8Array(N), alive: new Uint8Array(N),
     nest: new Uint8Array(N),     // which colony this ant belongs to
-    age: new Float32Array(N), life: new Float32Array(N),
+    // Age in 64-bit: at 1× an ant ages 1/160 of a life tick per movement tick,
+    // and in 32-bit floats that step rounds away to nothing after about ten
+    // colony days — a months-long life would simply stop ageing.
+    age: new Float64Array(N), life: new Float32Array(N),
     energy: new Float32Array(N), hydration: new Float32Array(N), health: new Float32Array(N),
     carry: new Uint8Array(N), carryAmt: new Float32Array(N),
     tx: new Float32Array(N), ty: new Float32Array(N),
@@ -65,7 +68,8 @@
     puddles: [],
     intruders: [],
     corpses: [],
-    tick: 0,
+    tick: 0,         // movement ticks
+    lifeTick: 0,     // colony time, in life ticks (see DAY_TICKS)
   };
   AF.colony = colony;
 
@@ -134,7 +138,7 @@
     A.memx[i] = -1; A.memy[i] = -1;
     A.tx[i] = x; A.ty[i] = y;
     A.uid[i] = nextUid++;
-    A.born[i] = colony.tick;
+    A.born[i] = colony.lifeTick;
     A.sFood[i] = 0; A.sDirt[i] = 0; A.sFed[i] = 0; A.sHits[i] = 0; A.sDist[i] = 0;
     A.logI[i] = 0; A.logN[i] = 0;
     A.spd[i] = baseSpeed(caste) * (0.85 + Math.random() * 0.3);
@@ -221,7 +225,7 @@
     for (let k = colony.corpses.length - 1; k >= 0; k--) {
       const c = colony.corpses[k];
       if (c.held >= 0) continue;
-      c.age++;
+      c.age += AF.sim ? AF.sim.lifeRate() : 1;   // rots in colony time
       if (c.age < C.CORPSE_ROT) continue;
       const nest = AF.nests.get(c.nest);
       if (nest) nest.res.biomass += c.biomass * C.CORPSE_ROT_RETURN;
@@ -451,7 +455,7 @@
     for (let i = 0; i < N; i++) if (A.gen[i]) gen.push([i, A.gen[i]]);
 
     return {
-      tick: colony.tick, nextUid, nextBroodUid, ants, brood, gen,
+      tick: colony.tick, lifeTick: colony.lifeTick, nextUid, nextBroodUid, ants, brood, gen,
       piles: colony.piles, puddles: colony.puddles, intruders: [],
     };
   };
@@ -459,6 +463,8 @@
   colony.loadState = function (s) {
     colony.initPool();
     colony.tick = s.tick;
+    // Saves from before the two clocks ran life and movement as one.
+    colony.lifeTick = s.lifeTick != null ? s.lifeTick : s.tick;
     nextUid = s.nextUid; nextBroodUid = s.nextBroodUid;
 
     for (const nest of AF.nests.list) {
@@ -526,6 +532,7 @@
     colony.intruders.length = 0;
     colony.corpses.length = 0;
     colony.tick = 0;
+    colony.lifeTick = 0;
     for (let i = 0; i < N; i++) A.body[i] = null;
 
     AF.nests.reset(queens || 1);

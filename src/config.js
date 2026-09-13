@@ -20,25 +20,37 @@
     // watching; 60 made everything scurry. All biology is counted in ticks, so
     // changing this rescales the whole clock without touching the balance.
     BASE_HZ: 20,
-    TEND_EVERY: 120,   // ticks between auto-tend checks (scales with speed)
+    TEND_EVERY: 120,   // ticks between auto-tend checks
+
+    // Two clocks. Movement always runs at BASE_HZ: an ant walks, digs and
+    // fights at the same pace whatever the speed. Life — ageing, hunger,
+    // brood growing, the queen laying — runs on its own clock, where DAY_TICKS
+    // make one colony day. At 1× that day is a real day; the speed slider only
+    // speeds up life, locking onto one of these stops.
+    DAY_TICKS: 10800,
+    SPEED_STOPS: [1, 2, 3, 4, 6, 8, 12, 16, 24],
 
     MAX_ANTS: 6000,
     MAX_BROOD: 1500,
     MAX_PILES: 26,
     START_WORKERS: 24,
 
-    // ---- biology (in sim ticks; 60 ticks = 1 second at 1x) ----
-    EGG_T: 500,        // egg -> larva
-    LARVA_T: 1100,     // larva -> pupa (only advances while fed)
-    PUPA_T: 700,       // pupa -> adult
-    // A wide spread matters: with lifespans close together, everyone born in
-    // one burst dies in one burst, and the colony swings between boom and near
-    // collapse instead of settling.
-    LIFE_MIN: 10000,
-    LIFE_MAX: 46000,
-    // Real queens outlive their workers by a factor of hundreds, not tens.
-    // At 400k the colony reliably aged out behind her after about two hours.
-    QUEEN_LIFE: 2400000,
+    // ---- biology (in life ticks: DAY_TICKS of them make a colony day) ----
+    // Egg to adult in three colony days. A real colony takes six to eight
+    // weeks; this is the one place the farm cheats, so a new farm shows its
+    // first brood coming through within a sitting at the faster speeds.
+    EGG_T: 7200,       // egg -> larva     (16 hours)
+    LARVA_T: 14400,    // larva -> pupa    (32 hours; only advances while fed)
+    PUPA_T: 10800,     // pupa -> adult    (a day)
+    // Workers live months, like real ones: each does far more work in its
+    // life, and the queen needs to lay far fewer to keep the colony going.
+    // A wide spread still matters — with lifespans close together, everyone
+    // born in one burst dies in one burst, and the colony swings between boom
+    // and near collapse instead of settling.
+    LIFE_MIN: 324000,   // 30 days
+    LIFE_MAX: 1296000,  // 120 days
+    // Real queens live for years.
+    QUEEN_LIFE: 39420000,   // 10 years
 
     ENERGY_MAX: 100,
     ENERGY_DRAIN: 0.013,
@@ -56,10 +68,14 @@
 
     // ---- reproduction & the resource pool ----
     EGG_FOOD_COST: 5,
-    EGG_INTERVAL: 260,      // ticks between lays (scaled by food supply)
+    // With workers living months, she can take her time: an egg every couple
+    // of colony hours, about ten a day, holds a colony of several hundred.
+    EGG_INTERVAL: 1080,     // life ticks between lays (2.4 h; slower when food is short)
     FEED_COST: 1.0,         // food per larva feeding
     FEED_VALUE: 120,        // nutrition granted per feeding
-    LARVA_BURN: 0.6,        // nutrition a larva burns per tick while growing
+    // Sized so a larva still needs about six feedings over its 32 hours —
+    // the larder was balanced around that, at roughly 12 food per new adult.
+    LARVA_BURN: 0.05,       // nutrition a larva burns per life tick while growing
     FEED_RESERVE: 22,       // larder kept back for adults before brood is fed
     BROOD_PER_FORAGER: 0.55, // she will not lay beyond what the foragers support
     BIOMASS_PER_ANT: 4,     // pool cost to build an adult body
@@ -67,7 +83,15 @@
     FOOD_FROM_CORPSE: 0.8,  // cannibalised nutrition
 
     // ---- work ----
-    DIG_TICKS: 22,         // ticks to loosen one tile of soil
+    DIG_TICKS: 22,         // movement ticks to loosen one tile, before DIG_SLOW
+    // Digging meets the two clocks in the middle. Walking and hauling keep
+    // movement pace, but the cut itself is slower: DIG_SLOW times longer at 1×
+    // (about 70 seconds a tile — an ant chewing soil loose), shrinking with the
+    // square root of the speed (about 15 seconds at 24×). It has to be this
+    // large to matter: a digger's round trip out with the spoil is ~600 ticks,
+    // so at 8× the cut was still a small part of the cycle and digging only
+    // halved. Without it a crew could dig out a farm in a day.
+    DIG_SLOW: 60,
     DIG_LOAD: 3,           // tiles cut before hauling the spoil out
     // What one ant brings back in a trip. Once food is scattered, the round
     // trip is most of a forager's day, so a load has to be worth the walk — at
