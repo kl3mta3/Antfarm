@@ -25,15 +25,16 @@
       <button id="btnQueen" class="keeper">Add queen</button>
       <span class="sep keeper"></span>
       <button id="btnPh">Pheromones</button>
-      <button id="btnPlan">Nest plan</button>
+      <button id="btnPlan" class="keeper">Nest plan</button>
       <button id="btnFollow">Follow ant</button>
       <span class="sep"></span>
       <button id="btnFit">Fit view</button>
       <button id="btnReset" class="keeper">New colony</button>
       <span class="sep"></span>
       <button id="btnAuth">Admin</button>
-      <button id="btnOwn" class="primary" title="A farm of your own, running in your browser. No account needed.">Run your own</button>
+      <button id="btnOwn" class="primary" title="A farm of your own, running in your browser. No account needed.">Personal Farm</button>
       <button id="btnHouse" title="Back to the farm everyone watches" hidden>Watch the house farm</button>
+      <button id="btnBookmark" title="Keep a link to your farm so you can come back to it" hidden>Bookmark your farm</button>
     </div>
     <div id="flash" hidden></div>
     <div id="canvasWrap">
@@ -99,6 +100,23 @@
     <div class="actions">
       <button type="button" id="loginCancel">Cancel</button>
       <button type="submit" class="primary" id="loginGo">Sign in</button>
+    </div>
+  </form>
+</div>
+
+<div class="scrim" id="renameScrim" hidden>
+  <form class="dialog" id="renameForm">
+    <h3 id="renameTitle">Name this nest</h3>
+    <p class="sub" id="renameSub"></p>
+    <p class="err" id="renameErr"></p>
+    <div class="field">
+      <label for="renameInput">Name</label>
+      <input id="renameInput" type="text" maxlength="24" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="actions">
+      <button type="button" id="renameReset">Use default</button>
+      <button type="button" id="renameCancel">Cancel</button>
+      <button type="submit" class="primary">Save</button>
     </div>
   </form>
 </div>

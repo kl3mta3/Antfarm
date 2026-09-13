@@ -164,6 +164,10 @@
   }
   .embed #zoomPad { display: none !important; }
 
+  /* A name a keeper can click to rename. */
+  .nameable { cursor: pointer; border-bottom: 1px dashed transparent; }
+  .nameable:hover { border-bottom-color: var(--dim); }
+
   /* speed slider */
   #speed { width: 120px; accent-color: var(--accent); cursor: pointer; }
   .speedlabel {

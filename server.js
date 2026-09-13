@@ -241,6 +241,15 @@ const server = http.createServer(async (req, res) => {
   catch (e) { res.writeHead(400).end('bad request'); return; }
   const route = url.pathname;
 
+  // Health check for the hosting platform: a plain 200 "OK" as long as the
+  // server is up and answering. Checked before anything else, so it works on
+  // every domain this server answers to and never touches the simulation.
+  if (route === '/health') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end('OK');
+    return;
+  }
+
   if (route === '/api/login' && req.method === 'POST') {
     let creds;
     try { creds = JSON.parse(await readBody(req) || '{}'); }
@@ -291,7 +300,7 @@ const server = http.createServer(async (req, res) => {
     const result = house.act(action || {});
     const s = house.status();
     return json(req, res, result.ok ? 200 : 400,
-      Object.assign({}, result, { house: { autoTend: s.autoTend, speed: s.speed, paused: s.paused } }));
+      Object.assign({}, result, { house: { autoTend: s.autoTend, speed: s.speed, paused: s.paused, name: s.name } }));
   }
 
   // ---- landing page ----

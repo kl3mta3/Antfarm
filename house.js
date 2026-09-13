@@ -30,6 +30,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
     autoTend: true,
     speed: 1,
     paused: false,
+    name: null,          // a keeper's name for the farm; null shows "The house farm"
     tickMs: 0,          // rolling cost of one tick, for the health endpoint
     AF,
   };
@@ -46,6 +47,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         house.autoTend = data.house.autoTend !== false;
         house.speed = C.SPEED_STOPS.includes(data.house.speed) ? data.house.speed : 1;
         house.paused = !!data.house.paused;
+        house.name = NS.cleanName(data.house.name);
       }
       log('House farm restored: tick ' + col.tick + ', ' + col.count + ' ants.');
       return true;
@@ -59,7 +61,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
     const payload = JSON.stringify({
       v: 2, saved: Date.now(),
       world: W.saveState(), nests: NS.saveState(), colony: col.saveState(),
-      house: { autoTend: house.autoTend, speed: house.speed, paused: house.paused },
+      house: { autoTend: house.autoTend, speed: house.speed, paused: house.paused, name: house.name },
     });
     // Write beside and rename, so a crash mid-write can't leave half a farm.
     fs.mkdirSync(path.dirname(dataFile), { recursive: true });
@@ -156,7 +158,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
   }
 
   function controls() {
-    return { autoTend: house.autoTend, speed: house.speed, paused: house.paused };
+    return { autoTend: house.autoTend, speed: house.speed, paused: house.paused, name: house.name };
   }
 
   // `broadcast` is a keyframe going to everyone, which resets the baseline the
@@ -281,6 +283,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
     const nest = NS.get(A.nest[i]);
     return {
       i, alive: true, uid: A.uid[i], caste: A.caste[i], nest: A.nest[i],
+      name: col.antName(i),
       goal: sim.goalText(i), thought: sim.thought(i),
       health: r2(A.health[i]), energy: r2(A.energy[i]), hydration: r2(A.hydration[i]),
       carry: A.carry[i], age: A.age[i], life: A.life[i],
@@ -329,6 +332,31 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         col.reset(q);
         lastTiles = null;                // everyone gets a fresh keyframe
         return { ok: true };
+      }
+      // A keeper naming a nest or an ant. Everyone watching sees nest names in
+      // the stream, and an ant's name with that ant in the inspector.
+      case 'rename': {
+        const name = NS.cleanName(a.name);          // null puts the default back
+        if (a.kind === 'farm') {
+          house.name = name;                        // goes out with every frame
+          return { ok: true, name };
+        }
+        if (a.kind === 'nest') {
+          const nest = NS.get(Number(a.id));
+          if (!nest) return { ok: false, error: 'No such nest.' };
+          nest.name = name;
+          return { ok: true, name };
+        }
+        if (a.kind === 'ant') {
+          const i = Number(a.i);
+          if (!Number.isInteger(i) || i < 0 || i >= C.MAX_ANTS || !A.alive[i] ||
+              A.uid[i] !== Number(a.uid)) {
+            return { ok: false, error: 'That ant is no longer alive.' };
+          }
+          col.setAntName(i, name);
+          return { ok: true, name };
+        }
+        return { ok: false, error: 'Unknown rename.' };
       }
       default:
         return { ok: false, error: 'Unknown action.' };

@@ -34,9 +34,11 @@
 
   function setControls(h) {
     if (!h) return;
+    const name = NS.cleanName(h.name);              // the house farm's name, if a keeper gave it one
     const changed = h.autoTend !== mirror.controls.autoTend ||
-      h.speed !== mirror.controls.speed || h.paused !== mirror.controls.paused;
-    mirror.controls = { autoTend: !!h.autoTend, speed: h.speed, paused: !!h.paused };
+      h.speed !== mirror.controls.speed || h.paused !== mirror.controls.paused ||
+      name !== mirror.controls.name;
+    mirror.controls = { autoTend: !!h.autoTend, speed: h.speed, paused: !!h.paused, name };
     if (changed && mirror.onControls) mirror.onControls();
   }
 
@@ -67,6 +69,7 @@
       const nest = NS.get(s.id);
       if (!nest) continue;
       nest.alive = s.alive !== false;
+      nest.name = NS.cleanName(s.name);
       nest.entrance = s.entrance;
       nest.entrances = s.entrances;
       nest.plan = s.plan.map(p => Object.assign({ claims: 0 }, p));
@@ -236,6 +239,7 @@
   AF.sim.goalText = i => (mine(i) && detail.goal) || AF.ST_NAME[A.state[i]] || 'Idle';
   AF.sim.thought = i => (mine(i) && detail.thought) || '…';
   col.recentLog = i => (mine(i) && detail.log) || [];
+  col.antName = i => (mine(i) && NS.cleanName(detail.name)) || null;
   col.freeSlots = () => C.MAX_ANTS - col.count;
 
   // Called every animation frame.

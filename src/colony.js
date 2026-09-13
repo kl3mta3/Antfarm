@@ -70,6 +70,19 @@
     corpses: [],
     tick: 0,         // movement ticks
     lifeTick: 0,     // colony time, in life ticks (see DAY_TICKS)
+    // Names keepers have given individual ants, by uid. A reused slot gets a
+    // new uid, so a name lasts exactly as long as its ant.
+    names: {},
+  };
+
+  colony.antName = function (i) {
+    return (A.alive[i] && colony.names[A.uid[i]]) || null;
+  };
+  colony.setAntName = function (i, name) {
+    if (!A.alive[i]) return false;
+    if (name) colony.names[A.uid[i]] = name;
+    else delete colony.names[A.uid[i]];
+    return true;
   };
   AF.colony = colony;
 
@@ -456,6 +469,14 @@
 
     return {
       tick: colony.tick, lifeTick: colony.lifeTick, nextUid, nextBroodUid, ants, brood, gen,
+      // Only the living keep their names; the dead's are dropped here.
+      names: (() => {
+        const kept = {};
+        for (let i = 0; i < N; i++) {
+          if (A.alive[i] && colony.names[A.uid[i]]) kept[A.uid[i]] = colony.names[A.uid[i]];
+        }
+        return kept;
+      })(),
       piles: colony.piles, puddles: colony.puddles, intruders: [],
     };
   };
@@ -465,6 +486,11 @@
     colony.tick = s.tick;
     // Saves from before the two clocks ran life and movement as one.
     colony.lifeTick = s.lifeTick != null ? s.lifeTick : s.tick;
+    colony.names = {};
+    for (const uid in (s.names || {})) {
+      const name = AF.nests.cleanName(s.names[uid]);
+      if (name) colony.names[uid] = name;
+    }
     nextUid = s.nextUid; nextBroodUid = s.nextBroodUid;
 
     for (const nest of AF.nests.list) {
@@ -536,6 +562,7 @@
     colony.corpses.length = 0;
     colony.tick = 0;
     colony.lifeTick = 0;
+    colony.names = {};
     for (let i = 0; i < N; i++) A.body[i] = null;
 
     AF.nests.reset(queens == null ? 1 : queens);

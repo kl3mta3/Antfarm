@@ -355,11 +355,13 @@
     // view-only keys work signed out
     if (k === 'escape') {
       if (!$('loginScrim').hidden) { closeLogin(); return; }
+      if (!$('renameScrim').hidden) { closeRename(); return; }
       if (!$('newScrim').hidden) { closeNewColony(); return; }
       setTool('select'); return;
     }
     if (k === 'p') { R.showPheromones = !R.showPheromones; syncButtons(); return; }
-    if (k === 'n') { R.showPlan = !R.showPlan; syncButtons(); return; }
+    // The nest plan is for keepers on the house farm (anyone on their own).
+    if (k === 'n') { if (!locked()) { R.showPlan = !R.showPlan; syncButtons(); } return; }
 
     if (locked()) return;
     if (k === ' ') { e.preventDefault(); togglePause(); }
@@ -448,7 +450,7 @@
     if (tool === 'queen') flash('Click the surface where the new queen should dig in.');
   });
   $('btnPh').onclick = () => { R.showPheromones = !R.showPheromones; syncButtons(); };
-  $('btnPlan').onclick = () => { R.showPlan = !R.showPlan; syncButtons(); };
+  $('btnPlan').onclick = guard(() => { R.showPlan = !R.showPlan; syncButtons(); });
   $('btnFollow').onclick = () => { R.follow = !R.follow; syncButtons(); };
   $('btnFit').onclick = () => { R.fit(); R.clampCam(); };
   $('btnReset').onclick = guard(() => openNewColony());
@@ -459,8 +461,31 @@
   $('btnHouse').onclick = () => { location.href = '/'; };
   $('btnOwn').hidden = !HOUSE;
   $('btnHouse').hidden = HOUSE;
+  $('btnBookmark').hidden = HOUSE;
   $('btnAuth').hidden = !HOUSE;
-  $('farmTitle').textContent = HOUSE ? 'The house farm' : 'Your farm';
+
+  // Keep a link back to a personal farm. No browser lets a page add a bookmark
+  // itself any more, so: on a phone or tablet, open the share sheet with the
+  // link (it offers "Add bookmark" and "Add to home screen"); elsewhere, copy
+  // the link and give the keyboard shortcut. The farm lives in this browser's
+  // storage, so the bookmark only brings it back in the same browser.
+  $('btnBookmark').onclick = async () => {
+    const url = location.origin + '/play';
+    if (navigator.share && coarsePointer) {
+      try {
+        await navigator.share({ title: 'My ant farm', url });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;          // they closed the share sheet
+      }
+    }
+    let copied = false;
+    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { /* no clipboard access */ }
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+    flash('Press ' + (mac ? '⌘D' : 'Ctrl+D') + ' to bookmark this page' +
+      (copied ? ' (the link is copied too)' : '') +
+      '. Your farm is saved in this browser, so come back to it in the same one.');
+  };
 
   // ------------------------------------------------------------- sign-in UI
 
@@ -497,6 +522,90 @@
 
   AF.auth.onChange = syncButtons;
   AF.auth.refresh();
+
+  // --------------------------------------------------------------- renaming
+  // A keeper can name a nest (click its title) or an ant (click its name in
+  // the inspector). In the house farm the name goes through the server, which
+  // checks the sign-in, and everyone watching sees it. An ant's name lasts as
+  // long as the ant: when it dies its slot gets a new id and the default back.
+  let renaming = null;
+
+  function openRename(target) {
+    if (locked()) return;
+    if (target.kind === 'farm') {
+      renaming = target;
+      $('renameTitle').textContent = 'Name the house farm';
+      $('renameSub').textContent = 'Everyone watching sees the new name.';
+      $('renameInput').value = AF.mirror.controls.name || '';
+      $('renameInput').placeholder = 'The house farm';
+      $('renameErr').textContent = '';
+      $('renameScrim').hidden = false;
+      $('renameInput').focus();
+      $('renameInput').select();
+      return;
+    }
+    renaming = target;
+    const isNest = target.kind === 'nest';
+    const nest = isNest ? AF.nests.get(target.id) : null;
+    $('renameTitle').textContent = isNest ? 'Name this nest' : 'Name this ant';
+    $('renameSub').textContent = isNest
+      ? (HOUSE ? 'Everyone watching the house farm sees the new name.' : 'Shown on this nest’s card.')
+      : (HOUSE ? 'Everyone who inspects this ant sees it. It lasts as long as the ant does.'
+               : 'It lasts as long as the ant does.');
+    $('renameInput').value = isNest ? (nest.name || '') : (col.antName(target.i) || '');
+    $('renameInput').placeholder = isNest
+      ? (nestNames[nest.id] || ('Nest ' + (nest.id + 1)))
+      : 'Ant #' + target.uid;
+    $('renameErr').textContent = '';
+    $('renameScrim').hidden = false;
+    $('renameInput').focus();
+    $('renameInput').select();
+  }
+  function closeRename() { $('renameScrim').hidden = true; renaming = null; }
+
+  async function saveRename(raw) {
+    const t = renaming;
+    if (!t) return;
+    const name = AF.nests.cleanName(raw);
+    if (t.kind === 'ant' && (!A.alive[t.i] || A.uid[t.i] !== t.uid)) {
+      $('renameErr').textContent = 'That ant has died.';
+      return;
+    }
+    if (HOUSE) {
+      const res = await AF.mirror.act({ type: 'rename', kind: t.kind, id: t.id, i: t.i, uid: t.uid, name });
+      if (!res.ok) {
+        if (res.status === 401) { closeRename(); await AF.auth.refresh(); openLogin(); return; }
+        $('renameErr').textContent = res.error || 'That name wasn’t saved.';
+        return;
+      }
+      // Show it straight away; the server's copy arrives within a second.
+      if (t.kind === 'nest') { const n = AF.nests.get(t.id); if (n) n.name = res.name || null; }
+      if (t.kind === 'farm') { AF.mirror.controls.name = res.name || null; syncButtons(); }
+    } else if (t.kind === 'nest') {
+      const n = AF.nests.get(t.id);
+      if (n) n.name = name;
+    } else {
+      col.setAntName(t.i, name);
+    }
+    closeRename();
+    renderAntCard(true);
+  }
+
+  $('nestCards').addEventListener('click', e => {
+    const el = e.target.closest('[data-nest]');
+    if (el && !locked()) openRename({ kind: 'nest', id: Number(el.dataset.nest) });
+  });
+  $('antCard').addEventListener('click', e => {
+    const el = e.target.closest('[data-ant]');
+    if (!el || locked()) return;
+    const i = Number(el.dataset.ant);
+    if (A.alive[i]) openRename({ kind: 'ant', i, uid: A.uid[i] });
+  });
+  $('renameForm').onsubmit = e => { e.preventDefault(); saveRename($('renameInput').value); };
+  $('renameReset').onclick = () => saveRename('');
+  $('renameCancel').onclick = closeRename;
+  $('renameScrim').onmousedown = e => { if (e.target === $('renameScrim')) closeRename(); };
+  $('farmTitle').addEventListener('click', () => { if (HOUSE && !locked()) openRename({ kind: 'farm' }); });
 
   // --------------------------------------------------------- new colony UI
 
@@ -540,6 +649,14 @@
     // greyed-out buttons a watcher can't use are just clutter.
     document.querySelectorAll('.keeper').forEach(el => { el.hidden = lock; });
     if (lock && tool !== 'select') setTool('select');
+    if (lock && R.showPlan) R.showPlan = false;           // the plan is keepers-only
+
+    // The farm's title. On the house farm a keeper can click it to rename the
+    // farm for everyone.
+    const farmTitle = HOUSE ? (AF.mirror.controls.name || 'The house farm') : 'Your farm';
+    if ($('farmTitle').textContent !== farmTitle) $('farmTitle').textContent = farmTitle;
+    $('farmTitle').classList.toggle('nameable', HOUSE && !lock);
+    $('farmTitle').title = HOUSE && !lock ? 'Click to rename' : '';
 
     const paused = HOUSE ? AF.mirror.controls.paused : sim.paused;
     const speed = HOUSE ? AF.mirror.controls.speed : sim.speed;
@@ -633,16 +750,27 @@
 
   const nestNames = ['First nest', 'Second nest', 'Third nest'];
 
+  // Names are typed by keepers and shown to everyone, so they are always
+  // escaped before going into the page.
+  const esc = s => String(s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const nestLabel = nest => nest.name || nestNames[nest.id] || ('Nest ' + (nest.id + 1));
+  const antLabel = i => col.antName(i) || ('Ant #' + A.uid[i]);
+  // Marks a name as clickable to rename, for whoever is allowed to.
+  const nameAttrs = (attr, value) => locked() ? '' :
+    ' class="nameable" ' + attr + '="' + value + '" title="Click to rename"';
+
   function renderNestCards() {
     let html = '';
     for (const nest of AF.nests.list) {
       const pop = Math.max(1, nest.count);
       const dead = !nest.alive || nest.count === 0;
-      const name = nestNames[nest.id] || ('Nest ' + (nest.id + 1));
+      const name = nestLabel(nest);
 
       html += '<div class="card">';
       html += '<h2><span class="swatch" style="background:' + nest.colors.tint +
-        '"></span>' + name + (dead ? ' — gone' : '') + '</h2>';
+        '"></span><span' + nameAttrs('data-nest', nest.id) + '>' + esc(name) + '</span>' +
+        (dead ? ' — gone' : '') + '</h2>';
 
       if (dead) {
         html += '<div class="empty">No queen, no workers. Its chambers passed to whoever was nearest.</div></div>';
@@ -715,7 +843,7 @@
     const many = AF.nests.count() > 1;
     for (const nest of AF.nests.list) {
       if (!nest.alive || nest.count === 0) continue;
-      const who = many ? (nestNames[nest.id] || 'A nest') + ': ' : '';
+      const who = many ? esc(nestLabel(nest)) + ': ' : '';
       if (nest.res.water < 12) a.push(['', who + 'out of water. Drop some on the surface.']);
       else if (nest.res.water < 35) a.push(['warn', who + 'water is running low.']);
       if (nest.res.food < 12) a.push(['', who + 'the larder is empty.']);
@@ -781,12 +909,13 @@
     const casteKey = AF.CASTE_KEY[caste];
 
     let html = '<h2>Inspector</h2>' +
-      '<div class="row"><span class="name">Ant #' + A.uid[i] + '</span>' +
+      '<div class="row"><span class="name"><span' + nameAttrs('data-ant', i) + '>' +
+        esc(antLabel(i)) + '</span></span>' +
       '<span class="badge" style="background:' + nest.colors[casteKey] + '">' +
       AF.CASTE_NAME[caste] + '</span></div>' +
       (AF.nests.count() > 1
         ? '<div class="row"><span class="k">Nest</span><span class="v">' +
-          (nestNames[nest.id] || ('Nest ' + (nest.id + 1))) + '</span></div>'
+          esc(nestLabel(nest)) + '</span></div>'
         : '') +
 
       '<div class="row"><span class="k">Goal</span><span class="v">' + sim.goalText(i) + '</span></div>' +

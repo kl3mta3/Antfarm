@@ -49,6 +49,7 @@
       count: 0, broodCount: 0,
       castePop: new Array(AF.NCASTE).fill(0),
       broodPop: [0, 0, 0],
+      name: null,         // a keeper's name for it; null shows the default ("First nest")
       queen: -1,
       queenFeeder: -1,    // the nurse currently bringing the queen food, if any
       roomGen: 0,         // how many times the queen, brood and larder have been given deeper rooms
@@ -171,15 +172,25 @@
     return node;
   }
 
+  // The first rooms a nest plans. Same kinds of room every time — shaft, a
+  // store and a nursery off to the sides, a queen's chamber below — but laid
+  // out a little differently for each nest: mirrored left or right, with the
+  // side rooms set further out or closer in, deeper or shallower, and sized a
+  // little differently. Every nest used to get the identical layout. The
+  // ranges keep the rooms clear of the larder and the queen's starting
+  // chamber dug down the entrance shaft (see carveStart).
   function buildInitialPlan(nest) {
     const ex = nest.entrance.x - 0.5;
     const sy = W.surfaceAt(nest.entrance.x);
+    const rnd = (lo, hi) => lo + Math.random() * (hi - lo);
+    const side = Math.random() < 0.5 ? -1 : 1;          // which side the store goes
+
     addNode(nest, ex + 0.5, sy + 8, 2.0, 'shaft');
     addNode(nest, ex + 0.5, sy + 18, 2.0, 'shaft');
-    nest.storeNode = addNode(nest, ex - 11, sy + 22, 4.0, 'store');
-    nest.broodNode = addNode(nest, ex + 12, sy + 30, 4.2, 'nursery');
-    addNode(nest, ex + 0.5, sy + 34, 2.0, 'shaft');
-    nest.queenNode = addNode(nest, ex - 2, sy + 46, 4.4, 'queen');
+    nest.storeNode = addNode(nest, ex + 0.5 + side * rnd(10, 13), sy + rnd(20, 24), rnd(3.6, 4.4), 'store');
+    nest.broodNode = addNode(nest, ex + 0.5 - side * rnd(11, 14), sy + rnd(28, 33), rnd(3.8, 4.6), 'nursery');
+    addNode(nest, ex + 0.5, sy + rnd(33, 36), 2.0, 'shaft');
+    nest.queenNode = addNode(nest, ex + 0.5 + side * rnd(-4, 2), sy + rnd(44, 50), rnd(4.0, 4.8), 'queen');
   }
 
   // Where to sink another entrance, or null if the colony doesn't need one.
@@ -663,6 +674,15 @@
     W.fieldsStale = false;
   };
 
+  // A name a keeper typed for a nest or an ant: no control characters, runs
+  // of spaces collapsed, at most 24 characters. Empty means "use the default".
+  // Shared by the server (which enforces it) and the page (which previews it).
+  nests.cleanName = function (raw) {
+    if (typeof raw !== 'string') return null;
+    const s = raw.replace(/[ -]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    return s || null;
+  };
+
   nests.store = function (nest) { return nest._store || nest.founding; };
   nests.brood = function (nest) { return nest._brood || nest.founding; };
   nests.royal = function (nest) { return nest._queen || nest.founding; };
@@ -742,6 +762,7 @@
       queenIdx: n.plan.indexOf(n.queenNode),
       res: n.res, stats: n.stats, queen: n.queen,
       pendingSpoil: n.pendingSpoil, policy: n.policy, roomGen: n.roomGen || 0,
+      name: n.name || null,
     }));
   };
 
@@ -787,6 +808,7 @@
       nest.queen = s.queen;
       nest.pendingSpoil = s.pendingSpoil || 0;
       nest.roomGen = s.roomGen || 0;
+      nest.name = nests.cleanName(s.name);
       if (s.policy) nest.policy = s.policy;
       nests.list.push(nest);
     }
