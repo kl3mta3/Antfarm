@@ -760,7 +760,26 @@
   const nameAttrs = (attr, value) => locked() ? '' :
     ' class="nameable" ' + attr + '="' + value + '" title="Click to rename"';
 
+  // The side panels are rebuilt several times a second. A name under the
+  // pointer would be swapped out mid-hover (its underline flickers) and
+  // mid-click (press and release land on different elements, so no click).
+  // While the pointer is on a name, that panel holds still.
+  const holding = { nestCards: null, antCard: null };
+  for (const id of Object.keys(holding)) {
+    const box = $(id);
+    box.addEventListener('pointerover', e => {
+      const el = e.target.closest('.nameable');
+      if (el) holding[id] = el;
+    });
+    box.addEventListener('pointerout', e => {
+      const el = e.target.closest('.nameable');
+      if (el && !(e.relatedTarget && el.contains(e.relatedTarget))) holding[id] = null;
+    });
+  }
+  const held = id => holding[id] !== null && holding[id].isConnected;
+
   function renderNestCards() {
+    if (held('nestCards')) return;
     let html = '';
     for (const nest of AF.nests.list) {
       const pop = Math.max(1, nest.count);
@@ -878,6 +897,7 @@
   function renderAntCard(force) {
     const i = R.selected;
     const card = $('antCard');
+    if (!force && i >= 0 && held('antCard')) return;
 
     if (i < 0) {
       if (force || !card.dataset.empty) {
