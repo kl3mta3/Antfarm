@@ -147,7 +147,22 @@ function staticPath(url) {
 
 // ---------------------------------------------------------------- house farm
 
-const house = createHouse({ root: ROOT, dataFile: DATA_FILE });
+// A fingerprint of the page and scripts this server is handing out. An open
+// house-farm page keeps running the code it loaded, and the live stream
+// reconnects on its own after a redeploy — so without this a tab left open
+// across an update showed the new farm through the old code indefinitely.
+// Viewers reload when they reconnect to a different build.
+const BUILD = (() => {
+  const h = crypto.createHash('sha1');
+  const files = ['index.html', 'style.css'].concat(
+    fs.readdirSync(path.join(ROOT, 'src')).filter(f => f.endsWith('.js')).sort().map(f => 'src/' + f));
+  for (const f of files) {
+    try { h.update(f); h.update(fs.readFileSync(path.join(ROOT, f))); } catch (e) { /* missing file: skip */ }
+  }
+  return h.digest('hex').slice(0, 12);
+})();
+
+const house = createHouse({ root: ROOT, dataFile: DATA_FILE, build: BUILD });
 house.start();
 
 const viewers = new Set();

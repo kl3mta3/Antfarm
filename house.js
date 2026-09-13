@@ -13,7 +13,7 @@ const vm = require('vm');
 const SIM_FILES = ['config', 'world', 'nests', 'colony', 'grid', 'ai'];
 const TAU = Math.PI * 2;
 
-function createHouse({ root, dataFile, log = console.log }) {
+function createHouse({ root, dataFile, build = '', log = console.log }) {
   // ------------------------------------------------------------ the sandbox
   const sandbox = { console, btoa, atob, performance };
   vm.createContext(sandbox);
@@ -165,6 +165,7 @@ function createHouse({ root, dataFile, log = console.log }) {
     }
     return JSON.stringify({
       tick: col.tick,
+      build,             // which version of the page and scripts this server serves
       world: W.saveState(), nests: NS.saveState(), colony: col.saveState(),
       house: controls(),
     });

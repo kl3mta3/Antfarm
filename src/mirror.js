@@ -43,6 +43,13 @@
   // ------------------------------------------------------------- keyframes
   // The ordinary save payload, loaded with the same code a page reload uses.
   function applyKey(k) {
+    // The server has been updated since this page loaded: reload to pick up
+    // the new code, rather than show the new farm through the old scripts.
+    if (k.build && mirror.build && k.build !== mirror.build) {
+      location.reload();
+      return;
+    }
+    if (k.build) mirror.build = k.build;
     W.loadState(k.world);
     NS.loadState(k.nests);
     col.loadState(k.colony);
