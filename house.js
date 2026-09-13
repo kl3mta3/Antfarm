@@ -87,11 +87,18 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
       const foodWant = 70 + nest.count * 2.6;
       const waterWant = 70 + nest.count * 2.2;
       const load = Math.max(C.PILE_AMOUNT, Math.round(nest.count * 3));
-      if (nest.res.food < foodWant && nearby(col.piles, range) < foodWant * 1.5) {
+      // Two reasons to drop: the stores are running low, or there's barely
+      // anything left lying out on the surface. The second keeps food and water
+      // visibly out in the farm even once the larder is full — a well-fed colony
+      // stops foraging and leaves it there.
+      const onGroundFood = nearby(col.piles, range);
+      const onGroundWater = nearby(col.puddles, wet * 1.6);
+      const keepOut = Math.max(40, nest.count);
+      if ((nest.res.food < foodWant && onGroundFood < foodWant * 1.5) || onGroundFood < keepOut) {
         const x = scatterFood();
         col.addPile(x, W.surfaceAt(x) - 0.6, load);
       }
-      if (nest.res.water < waterWant && nearby(col.puddles, wet * 1.6) < waterWant * 1.5) {
+      if ((nest.res.water < waterWant && onGroundWater < waterWant * 1.5) || onGroundWater < keepOut) {
         const x = nearWater();
         col.addPuddle(x, W.surfaceAt(x) - 0.4, load);
       }

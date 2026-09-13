@@ -96,11 +96,18 @@
       // The only reason to hold off is the ground already being littered. Gate
       // loosely: a strict gate stops restocking while food the ants have not
       // found yet sits outside, and the larder empties underneath it.
-      if (nest.res.food < foodWant && nearby(col.piles, range) < foodWant * 1.5) {
+      // Two reasons to drop: the stores are running low, or there's barely
+      // anything left lying out on the surface. The second keeps food and water
+      // visibly out in the farm even once the larder is full — a well-fed colony
+      // stops foraging and leaves it there.
+      const onGroundFood = nearby(col.piles, range);
+      const onGroundWater = nearby(col.puddles, wet * 1.6);
+      const keepOut = Math.max(40, nest.count);
+      if ((nest.res.food < foodWant && onGroundFood < foodWant * 1.5) || onGroundFood < keepOut) {
         const x = scatterFood();
         col.addPile(x, W.surfaceAt(x) - 0.6, load);
       }
-      if (nest.res.water < waterWant && nearby(col.puddles, wet * 1.6) < waterWant * 1.5) {
+      if ((nest.res.water < waterWant && onGroundWater < waterWant * 1.5) || onGroundWater < keepOut) {
         const x = nearWater();
         col.addPuddle(x, W.surfaceAt(x) - 0.4, load);
       }
@@ -632,8 +639,11 @@
       else if (nest.res.food < 35) a.push(['warn', who + 'food is running low.']);
       if (nest.queen < 0) a.push(['', who + 'the queen is dead. No new eggs.']);
     }
-    if (col.puddles.length === 0) a.push(['warn', 'No water on the surface to forage.']);
-    if (col.piles.length === 0) a.push(['warn', 'Nothing left to forage out there.']);
+    // An empty surface only matters if a nest is actually running low.
+    const lowStores = AF.nests.list.some(n =>
+      n.alive && n.count > 0 && (n.res.food < 100 || n.res.water < 100));
+    if (lowStores && col.puddles.length === 0) a.push(['warn', 'No water on the surface to forage.']);
+    if (lowStores && col.piles.length === 0) a.push(['warn', 'Nothing left to forage out there.']);
     if (col.intruders.length) a.push(['', 'An intruder is in the farm.']);
 
     $('alerts').innerHTML = a.slice(0, 6).map(x =>

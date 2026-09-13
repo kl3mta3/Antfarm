@@ -174,6 +174,13 @@
     A.hd[i] += (Math.cos(t * rate * 1.7) - Math.cos((t - 1) * rate * 1.7)) * 0.35;
   }
 
+  // A larder three times the size auto-tend aims for is plenty: foraging can
+  // wait until it's eaten down.
+  function storesFull(nest) {
+    return nest.res.food > 3 * (70 + nest.count * 2.6) &&
+           nest.res.water > 3 * (70 + nest.count * 2.2);
+  }
+
   // Does the queen need food or water brought to her, with nobody already on
   // the way? One nurse at a time does the run.
   function queenWantsFeeding(nest) {
@@ -574,10 +581,23 @@
       else col.log(i, 25);
       return;
     }
+    // The larder is full: stop searching and come home.
+    if (searching && (col.tick + i) % 30 === 0 && storesFull(nest)) { setState(i, ST.IDLE); return; }
 
     switch (A.state[i]) {
       case ST.IDLE:
       case ST.LEAVE_NEST: {
+        // A colony with a full larder doesn't keep foraging: its foragers stay
+        // in and loaf near the stores, and food left out on the surface stays
+        // where it is until it's wanted.
+        if (storesFull(nest)) {
+          if (aboveGround(i)) { headInside(i, nest); break; }
+          const s = NS.store(nest);
+          if (dist2(A.x[i], A.y[i], s.x, s.y) > 20 * 20) navDown(i, nest.fStore, s.x, s.y);
+          else if ((col.tick + i * 13) % 360 < 120) fidget(i, 0.12, 0.15);
+          else stroll(i, 0.5);
+          break;
+        }
         if (headOutside(i, nest, nest.fHome)) {
           const wantWater = nest.res.water < nest.res.food * 0.85 && col.puddles.length > 0;
           setState(i, wantWater ? ST.SEEK_WATER : ST.SEEK_FOOD);
@@ -1998,6 +2018,7 @@
         nest.entrance.x += shift;
         for (const e of nest.entrances) if (e !== nest.entrance) e.x += shift;
         nest.founding.x += shift;
+        if (nest.larder) nest.larder.x += shift;
       }
     }
 

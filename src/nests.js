@@ -36,6 +36,8 @@
       entrance: { x: start.entrance.x, y: start.entrance.y },
       entrances: [{ x: start.entrance.x, y: start.entrance.y }],
       founding: { x: start.founding.x, y: start.founding.y, r: start.founding.r },
+      // The first larder, dug with the nest. Older saves don't have one.
+      larder: start.larder ? { x: start.larder.x, y: start.larder.y, r: start.larder.r } : null,
       plan: [],
       storeNode: null, broodNode: null, queenNode: null,
       _store: null, _brood: null, _queen: null,
@@ -630,7 +632,9 @@
     const f = nest.founding;
     nest._queen = deepest(nest, 'queen', 0.5) || f;
     nest._brood = deepest(nest, 'nursery', 0.35) || nest._queen;
-    nest._store = deepest(nest, 'store', 0.35) ||
+    // Until a larder room is dug: the first larder, dug with the nest — or, for
+    // nests from older saves that don't have one, a spot in the entrance shaft.
+    nest._store = deepest(nest, 'store', 0.35) || nest.larder ||
       { x: f.x, y: Math.max(W.surfaceAt(f.x) + 3, f.y - f.r - 4), r: 1.6 };
   };
 
@@ -723,7 +727,7 @@
   nests.saveState = function () {
     return nests.list.map(n => ({
       id: n.id, alive: n.alive,
-      entrance: n.entrance, entrances: n.entrances, founding: n.founding,
+      entrance: n.entrance, entrances: n.entrances, founding: n.founding, larder: n.larder,
       // Everything a node needs to carry on where it left off. Dropping
       // `adopted` made every open shaft look outstanding after a reload, and
       // each was pushed onto the entrance list a second time.
@@ -745,7 +749,7 @@
     nests.list = [];
     nodeSeq = 0;
     for (const s of saved) {
-      const nest = makeNest(s.id, { entrance: s.entrance, founding: s.founding });
+      const nest = makeNest(s.id, { entrance: s.entrance, founding: s.founding, larder: s.larder });
       nest.alive = s.alive !== false;
       if (s.entrances && s.entrances.length) {
         nest.entrances = s.entrances.map(e => ({ x: e.x, y: e.y }));

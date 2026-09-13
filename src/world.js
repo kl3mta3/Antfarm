@@ -79,21 +79,26 @@
          + Math.sin(x * 0.27 + seed * 5.1) * 0.8;
   }
 
-  // Carve one founding site: a shaft from the surface down to a small chamber.
-  // A real founding queen digs this herself before any workers exist.
+  // Carve one founding site: a shaft from the surface down past a small larder
+  // chamber to the queen's own chamber below it. She is dug in deep from the
+  // start, the first stores are kept nearer the door, and her nurses carry her
+  // food down. (With a single chamber she shared her room with the food.)
   function carveStart(ex) {
     const sy = surfY[ex];
-    const fc = { x: ex + 0.5, y: sy + 11, r: 3.6 };
+    const larder = { x: ex + 0.5, y: sy + 10, r: 3.0 };
+    const fc = { x: ex + 0.5, y: sy + 24, r: 3.6 };
     for (let y = sy - 1; y <= fc.y; y++) {
       tiles[idx(ex, y)] = T.AIR;
       tiles[idx(ex + 1, y)] = T.AIR;
     }
-    for (let y = Math.floor(fc.y - fc.r); y <= fc.y + fc.r; y++) {
-      for (let x = Math.floor(fc.x - fc.r); x <= fc.x + fc.r; x++) {
-        if (Math.hypot(x - fc.x, y - fc.y) <= fc.r && inb(x, y)) tiles[idx(x, y)] = T.AIR;
+    for (const room of [larder, fc]) {
+      for (let y = Math.floor(room.y - room.r); y <= room.y + room.r; y++) {
+        for (let x = Math.floor(room.x - room.r); x <= room.x + room.r; x++) {
+          if (Math.hypot(x - room.x, y - room.y) <= room.r && inb(x, y)) tiles[idx(x, y)] = T.AIR;
+        }
       }
     }
-    return { entrance: { x: ex + 0.5, y: sy + 1.5 }, founding: fc, surface: sy };
+    return { entrance: { x: ex + 0.5, y: sy + 1.5 }, founding: fc, larder, surface: sy };
   }
 
   world.carveStart = carveStart;

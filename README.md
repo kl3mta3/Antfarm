@@ -54,7 +54,11 @@ evaporate, and nothing replaces them but you.
   unwatered farm always dies of thirst first.
 - **Auto-tend** — hand the job back to the farm. It keeps food and water topped
   up in proportion to the colony's size, in drops that also scale with it. It
-  restocks whenever the stores run low, so the ration holds at any speed.
+  drops more whenever a nest's stores run low, **and** whenever there's barely
+  anything left lying out near it, so food and water stay visible on the surface
+  even once the larder is full. A colony whose larder holds three times what
+  auto-tend aims for stops foraging, its foragers stay in, and what's lying out
+  stays there until it's wanted.
 
 **Water goes near the entrance; food gets scattered.** That split is deliberate.
 Thirst kills faster than hunger, so a reliable drink is what makes a long search
@@ -342,8 +346,11 @@ ants by tick 25,000.
 nursery and the larder all follow that rule, so as the nest digs deeper rooms
 they move down into them. A room only counts once it's dug and reachable.
 
-- **At first**, the queen and her brood are in the founding chamber, and the
-  larder sits up in the entrance shaft, not in her room.
+- **At first**, a new nest is dug with two rooms: a small larder chamber just
+  below the door, and the shaft carrying on down to the queen's own chamber
+  about 24 tiles underground. She and her brood start down there; the food is
+  kept up in the larder. (Nests from older saves, dug with a single chamber, keep
+  their larder in the entrance shaft instead.)
 - **As the colony grows**, the room programme keeps adding nurseries and larders,
   and each new deeper one takes over. Nurses carry the brood down after it.
 - **For every 60 more ants**, once her current chamber is finished, a new royal
