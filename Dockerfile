@@ -8,7 +8,11 @@ COPY src ./src
 COPY landing ./landing
 
 # The house farm is saved here. Mount a volume so it survives the container.
-RUN mkdir -p /data && chown node:node /data
+# su-exec lets the entrypoint fix /data's ownership as root and then run the
+# server as the unprivileged node user (see docker-entrypoint.sh).
+RUN apk add --no-cache su-exec && mkdir -p /data && chown node:node /data
+COPY docker-entrypoint.sh /usr/local/bin/antfarm-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/antfarm-entrypoint.sh && chmod +x /usr/local/bin/antfarm-entrypoint.sh
 VOLUME /data
 
 ENV NODE_ENV=production
@@ -21,9 +25,11 @@ ENV ANTFARM_SESSION_HOURS=72
 # nobody can sign in to tend it.
 
 EXPOSE 8173
-USER node
+# No "USER node" here: the entrypoint starts as root only to make /data
+# writable, then runs the server as node.
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD wget -qO- http://localhost:8173/health >/dev/null || exit 1
 
+ENTRYPOINT ["antfarm-entrypoint.sh"]
 CMD ["node", "server.js"]

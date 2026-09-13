@@ -456,6 +456,16 @@ docker compose up -d --build
 The house farm is saved to a named volume (`antfarm-data`), so it survives
 restarts and rebuilds. It saves every 60 seconds and again on shutdown.
 
+The volume mounted at `/data` doesn't need any particular ownership. Volumes
+are often created owned by root (Coolify's was), and the server runs as the
+unprivileged `node` user, so every save used to be refused and the farm was
+lost on each redeploy. The container now starts as root just long enough to
+hand `/data` to `node` (`docker-entrypoint.sh`), then runs the server as `node`.
+
+To check the farm is being kept, look at `/api/house/status`: `saving` should be
+`ok`, and `lastSavedSecondsAgo` should be a number once it has run a minute. The
+startup log says `House farm restored: …` when a save was loaded.
+
 In production (`NODE_ENV=production`, as the image sets) there is **no fallback
 login**: if either variable is missing, sign-in is switched off. The farm can
 still be watched, and `/play` still works, but nobody can tend the house farm.
