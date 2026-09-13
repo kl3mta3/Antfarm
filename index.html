@@ -3,158 +3,12 @@
 <head>
 <meta charset="utf-8">
 <title>Antfarm</title>
-<style>
-  :root {
-    --bg: #0b0d12;
-    --panel: #141821;
-    --panel2: #1b2030;
-    --line: #2a3145;
-    --text: #d8dee9;
-    --dim: #8a93a6;
-    --accent: #ffd24a;
-    --green: #9ed14f;
-    --blue: #5aaee6;
-    --red: #c7553f;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 13px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
-    overflow: hidden;
-  }
-  #app { display: flex; height: 100%; }
-  #stage { flex: 1; position: relative; min-width: 0; display: flex; flex-direction: column; }
-  #canvasWrap { flex: 1; position: relative; min-height: 0; }
-  canvas { display: block; cursor: crosshair; }
-
-  #toolbar {
-    display: flex; align-items: center; gap: 6px; padding: 8px 10px;
-    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
-  }
-  button {
-    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-    padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;
-    font-family: inherit;
-  }
-  button:hover { background: #232a3d; border-color: #3a445f; }
-  button.on { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
-  button.food.on { background: var(--green); color: #14200a; border-color: var(--green); }
-  button.water.on { background: var(--blue); color: #041623; border-color: var(--blue); }
-  .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
-  .tblabel { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
-
-  #flash {
-    padding: 7px 12px; background: rgba(255,210,74,.12);
-    border-bottom: 1px solid rgba(255,210,74,.35);
-    color: var(--accent); font-size: 12.5px;
-  }
-  #side {
-    width: 340px; background: var(--panel); border-left: 1px solid var(--line);
-    display: flex; flex-direction: column; overflow-y: auto;
-  }
-  .card { border-bottom: 1px solid var(--line); padding: 12px 14px; }
-  .card h2 {
-    margin: 0 0 10px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
-    color: var(--dim); font-weight: 600;
-  }
-  .row { display: flex; justify-content: space-between; gap: 10px; margin: 3px 0; }
-  .row .k { color: var(--dim); }
-  .row .v { font-variant-numeric: tabular-nums; }
-  .big { font-size: 26px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
-
-  .bar { height: 6px; background: #0e1219; border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
-  .bar > i { display: block; height: 100%; border-radius: 3px; transition: width .2s; }
-
-  .castebar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; margin: 6px 0 10px; }
-  .castebar > i { display: block; height: 100%; }
-
-  .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
-
-  #alerts:empty { display: none; }
-  .alert {
-    background: rgba(199,85,63,.13); border: 1px solid rgba(199,85,63,.45);
-    color: #f0a596; padding: 7px 9px; border-radius: 5px; margin-bottom: 6px; font-size: 12px;
-  }
-  .alert.warn { background: rgba(255,210,74,.1); border-color: rgba(255,210,74,.4); color: #f0d489; }
-
-  #antCard .name { font-size: 17px; font-weight: 600; }
-  .badge {
-    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 11px;
-    font-weight: 600; color: #14161d;
-  }
-  .thought {
-    font-style: italic; color: #b9c4d8; background: var(--panel2);
-    border-left: 2px solid var(--accent); padding: 7px 9px; border-radius: 0 4px 4px 0;
-    margin: 8px 0 10px; font-size: 12px;
-  }
-  .log { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11.5px; color: var(--dim); }
-  .log li { padding: 2px 0; border-top: 1px solid rgba(42,49,69,.6); }
-  .log li b { color: #aab4c8; font-weight: 500; }
-  .empty { color: var(--dim); font-style: italic; }
-  .hint { color: var(--dim); font-size: 11.5px; margin-top: 8px; }
-  kbd {
-    background: var(--panel2); border: 1px solid var(--line); border-bottom-width: 2px;
-    border-radius: 3px; padding: 0 4px; font-size: 11px; font-family: inherit;
-  }
-
-  /* ---- dialogs ---- */
-  .scrim {
-    position: fixed; inset: 0; background: rgba(6,8,12,.72);
-    display: flex; align-items: center; justify-content: center; z-index: 50;
-    padding: 20px;
-  }
-  .scrim[hidden] { display: none; }
-  .dialog {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 20px; width: 100%; max-width: 380px;
-    box-shadow: 0 18px 50px rgba(0,0,0,.55);
-  }
-  .dialog h3 { margin: 0 0 4px; font-size: 16px; }
-  .dialog p.sub { margin: 0 0 16px; color: var(--dim); font-size: 12.5px; }
-  .field { margin-bottom: 12px; }
-  .field label {
-    display: block; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
-    color: var(--dim); margin-bottom: 5px;
-  }
-  .field input {
-    width: 100%; background: #0e1219; border: 1px solid var(--line); color: var(--text);
-    border-radius: 5px; padding: 8px 10px; font: inherit;
-  }
-  .field input:focus { outline: none; border-color: var(--accent); }
-  .choices { display: flex; gap: 8px; }
-  .choices button {
-    flex: 1; padding: 10px 4px; font-size: 15px; font-weight: 600;
-  }
-  .dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-  .dialog .err {
-    color: #f0a596; font-size: 12.5px; margin: 0 0 10px; min-height: 1em;
-  }
-  .note { color: var(--dim); font-size: 11.5px; margin-top: 12px; line-height: 1.5; }
-  button.primary { background: var(--accent); color: #1a1400; border-color: var(--accent); font-weight: 600; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.locked { opacity: .4; }
-
-  /* In a narrow window a fixed side panel squeezes the farm down to a sliver,
-     so stack instead: farm on top, readouts underneath. */
-  @media (max-width: 900px) {
-    #app { flex-direction: column; }
-    #stage { flex: 1 1 60%; min-height: 0; }
-    #side {
-      width: auto; flex: 0 0 40%;
-      border-left: none; border-top: 1px solid var(--line);
-    }
-    #toolbar { padding: 6px; gap: 4px; }
-    #toolbar button { padding: 4px 7px; font-size: 11px; }
-    .tblabel { display: none; }
-  }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
   <div id="stage">
     <div id="toolbar">
-      <!-- "keeper" items change the farm. Signed out of the house farm they
-           aren't shown at all. -->
       <button id="btnPause" class="keeper">Pause</button>
       <span class="tblabel keeper">Speed</span>
       <button class="spd keeper" data-s="1">1&times;</button>
@@ -174,7 +28,7 @@
       <button id="btnFit">Fit view</button>
       <button id="btnReset" class="keeper">New colony</button>
       <span class="sep"></span>
-      <button id="btnAuth">Sign in</button>
+      <button id="btnAuth">Admin</button>
       <button id="btnOwn" class="primary" title="A farm of your own, running in your browser. No account needed.">Run your own</button>
       <button id="btnHouse" title="Back to the farm everyone watches" hidden>Watch the house farm</button>
     </div>
