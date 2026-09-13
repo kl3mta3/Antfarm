@@ -146,6 +146,12 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
 
   // ------------------------------------------------------ real-time loop
   const STEP_MS = 1000 / C.BASE_HZ;
+  // The farm has a thread of its own (house-worker.js), but that thread also
+  // builds the frames viewers see and answers the server's requests. However
+  // far behind the farm is, it never works for more than this much of each
+  // step, so those always get a turn. A farm too big to keep up at the chosen
+  // speed simply runs slower than that speed.
+  const BUDGET_MS = STEP_MS * 0.8;
   let last = Date.now(), acc = 0, tendTicks = 0, failures = 0;
 
   function advance() {
@@ -159,7 +165,8 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
     // Speed is how many ticks run per step: at 24×, 24 times as much of
     // everything happens each second.
     sim.speed = house.speed;
-    while (acc >= STEP_MS && steps < 40) {
+    let outOfTime = false;
+    while (acc >= STEP_MS && steps < 40 && !outOfTime) {
       for (let s = 0; s < house.speed; s++) {
         try {
           sim.tick();
@@ -169,11 +176,14 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         }
         ticks++;
         if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; if (house.autoTend) tend(); }
+        if (Number(process.hrtime.bigint() - t0) / 1e6 > BUDGET_MS) { outOfTime = true; break; }
       }
       acc -= STEP_MS;
       steps++;
     }
-    if (acc > STEP_MS * 40) acc = 0;           // fell badly behind: don't try to catch up
+    house.lagging = outOfTime;
+    // Behind: drop the time it couldn't fit rather than piling it up.
+    if (outOfTime || acc > STEP_MS * 40) acc = 0;
     if (ticks) {
       const ms = Number(process.hrtime.bigint() - t0) / 1e6 / ticks;
       house.tickMs = house.tickMs * 0.9 + ms * 0.1;
@@ -405,6 +415,8 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
       tick: col.tick, day: Math.floor(col.lifeTick / C.DAY_TICKS) + 1,
       ants: col.count, nests: NS.list.filter(n => n.alive).length,
       tickMs: Math.round(house.tickMs * 1000) / 1000, ...controls(),
+      // True when the farm is too busy to run at the chosen speed.
+      lagging: !!house.lagging,
       // Whether the farm is being kept: 'ok', or 'failing' (see the log for why).
       saving: house.saveError ? 'failing' : 'ok',
       lastSavedSecondsAgo: house.lastSaved ? Math.round((Date.now() - house.lastSaved) / 1000) : null,

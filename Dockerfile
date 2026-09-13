@@ -3,7 +3,7 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY index.html style.css server.js house.js ./
+COPY index.html style.css server.js house.js house-worker.js ./
 COPY src ./src
 COPY landing ./landing
 
@@ -28,8 +28,8 @@ EXPOSE 8173
 # No "USER node" here: the entrypoint starts as root only to make /data
 # writable, then runs the server as node.
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD wget -qO- http://localhost:8173/health >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD wget -qO- -T 8 http://127.0.0.1:8173/health >/dev/null || exit 1
 
 ENTRYPOINT ["antfarm-entrypoint.sh"]
 CMD ["node", "server.js"]

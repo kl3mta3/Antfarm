@@ -644,7 +644,9 @@ farm keeps running while the window is hidden.
 
 | | |
 |---|---|
-| `server.js` | static files plus the login API; no dependencies |
+| `server.js` | static files, the login API and the live stream; no dependencies |
+| `house.js` | the house farm: the simulation in a sandbox, frames, saves, keeper actions |
+| `house-worker.js` | runs the house farm on its own thread, so a busy farm never holds up the server |
 | `src/config.js` | every tunable constant — biology, costs, speeds, balance |
 | `src/world.js` | soil, terrain, spoil physics, alarm scent, the growing farm |
 | `src/nests.js` | per-colony chambers, navigation fields, private trail, queen policy |

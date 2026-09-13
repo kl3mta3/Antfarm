@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
-const { createHouse } = require('./house');
+const { Worker } = require('worker_threads');
 
 // Read a local .env if there is one. Docker Compose passes it in for the
 // container, but a plain `node server.js` wouldn't see it, and silently fell
@@ -162,12 +162,84 @@ const BUILD = (() => {
   return h.digest('hex').slice(0, 12);
 })();
 
-const house = createHouse({ root: ROOT, dataFile: DATA_FILE, build: BUILD });
-house.start();
+// The farm runs on its own thread (house-worker.js) so that however busy it
+// gets, this thread is free to serve pages, the stream and the health check.
+// Everything the routes need from it is asked for by message.
+const farm = (() => {
+  let worker = null, nextId = 1, restarts = 0, stopping = false, watching = false;
+  const pending = new Map();   // request id -> { resolve, reject, timer }
+  const api = { onFrame: null };
+
+  function spawn() {
+    const born = Date.now();
+    worker = new Worker(path.join(ROOT, 'house-worker.js'), {
+      workerData: { root: ROOT, dataFile: DATA_FILE, build: BUILD, frameHz: FRAME_HZ, saveSeconds: SAVE_SECONDS },
+    });
+    worker.postMessage({ type: 'watching', on: watching });
+    worker.on('message', m => {
+      if (m.type === 'frame') { if (api.onFrame) api.onFrame(m); return; }
+      if (m.type !== 'reply') return;
+      const p = pending.get(m.id);
+      if (!p) return;
+      pending.delete(m.id);
+      clearTimeout(p.timer);
+      if (m.error) p.reject(new Error(m.error)); else p.resolve(m.result);
+    });
+    worker.on('error', e => console.error('House farm thread crashed: ' + (e.stack || e)));
+    worker.on('exit', code => {
+      worker = null;
+      for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error('The house farm is restarting.')); }
+      pending.clear();
+      if (stopping) return;
+      // Start again from the last save. Back off if it keeps falling over.
+      if (Date.now() - born > 60000) restarts = 0;
+      const delay = Math.min(30000, 1000 * 2 ** Math.min(restarts++, 5));
+      console.error('House farm thread stopped (exit ' + code + '); restarting from its last save in ' +
+        delay / 1000 + 's.');
+      setTimeout(spawn, delay);
+    });
+  }
+
+  api.call = (method, arg, timeoutMs = 10000) => new Promise((resolve, reject) => {
+    if (!worker) return reject(new Error('The house farm is restarting.'));
+    const id = nextId++;
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error('The house farm did not answer in time.'));
+    }, timeoutMs);
+    pending.set(id, { resolve, reject, timer });
+    worker.postMessage({ type: 'call', id, method, arg });
+  });
+
+  api.setWatching = on => {
+    if (on === watching) return;
+    watching = on;
+    if (worker) worker.postMessage({ type: 'watching', on });
+  };
+
+  // Save once more before the process goes. Docker allows about ten seconds.
+  api.stop = () => {
+    stopping = true;
+    return api.call('save', 'shutdown', 8000)
+      .catch(e => console.error('Could not save the house farm on shutdown: ' + e.message));
+  };
+
+  spawn();
+  return api;
+})();
+
+// Asks the farm, or answers 503 if it can't right now. Returns { value } or null.
+async function ask(req, res, method, arg) {
+  try { return { value: await farm.call(method, arg) }; }
+  catch (e) {
+    json(req, res, 503, { error: 'The house farm is not answering right now. Try again in a moment.' });
+    return null;
+  }
+}
 
 const viewers = new Set();
 
-function openStream(req, res) {
+async function openStream(req, res) {
   if (viewers.size >= MAX_VIEWERS) {
     res.writeHead(503, { 'Retry-After': '30', 'Content-Type': 'text/plain' });
     res.end('The house farm has as many watchers as it can take. Try again shortly.');
@@ -187,50 +259,76 @@ function openStream(req, res) {
   if (out) out.pipe(res);
 
   const viewer = {
-    stale: false,
+    stale: false, refetching: false, closed: false,
     send(event, data) {
       const chunk = (event ? 'event: ' + event + '\n' : '') + data + '\n\n';
       if (out) { out.write(chunk); out.flush(); } else res.write(chunk);
     },
     backlog() { return res.writableLength + (out ? out.writableLength : 0); },
   };
-  viewer.send('key', 'data: ' + house.keyframe(false));
-  viewers.add(viewer);
-
   req.on('close', () => {
+    viewer.closed = true;
     viewers.delete(viewer);
+    farm.setWatching(viewers.size > 0);
     if (out) out.destroy();
   });
+
+  // Frames only start reaching this viewer once its keyframe has arrived.
+  // Replies and frames come from the farm in the order it sent them, so every
+  // frame after this is newer than the keyframe.
+  let key;
+  try { key = await farm.call('keyframe'); }
+  catch (e) {
+    // Ending the stream makes the page reconnect a moment later.
+    if (!viewer.closed) res.end();
+    return;
+  }
+  if (viewer.closed) return;
+  viewer.send('key', 'data: ' + key);
+  viewers.add(viewer);
+  farm.setWatching(true);
 }
 
-// One frame is built per tick of this timer and shared by every viewer.
-setInterval(() => {
-  if (!viewers.size) return;
-  const f = house.frame();
+// A viewer that fell behind gets a fresh keyframe rather than the deltas it
+// missed. Until it arrives, frames for that viewer are skipped.
+function refreshViewer(v) {
+  v.refetching = true;
+  farm.call('keyframe').then(key => {
+    v.refetching = false;
+    if (v.closed || !v.stale) return;
+    v.stale = false;
+    v.send('key', 'data: ' + key);
+  }, () => { v.refetching = false; });
+}
+
+// The farm sends each frame once; every viewer gets the same one.
+farm.onFrame = f => {
   const line = 'data: ' + f.data;
   for (const v of viewers) {
     // A viewer that can't keep up misses frames — and with them tile changes —
     // so when it catches up it gets a fresh keyframe instead of a delta.
     if (v.backlog() > 4 * 1024 * 1024) { v.stale = true; continue; }
-    if (v.stale && f.event === 'frame') {
-      v.stale = false;
-      v.send('key', 'data: ' + house.keyframe(false));
+    if (v.stale) {
+      if (f.event === 'key') { v.stale = false; v.send('key', line); }
+      else if (!v.refetching) refreshViewer(v);
       continue;
     }
     v.send(f.event, line);
   }
-}, 1000 / FRAME_HZ);
+};
 
 // Keep idle proxies from closing the stream.
 setInterval(() => { for (const v of viewers) v.send(null, ': ping'); }, 15000);
 
-function saveHouse(why) {
-  try { house.save(); }
-  catch (e) { console.error('Could not save the house farm (' + why + '): ' + e.message); }
-}
-setInterval(() => saveHouse('periodic'), SAVE_SECONDS * 1000);
+// The farm saves itself every SAVE_SECONDS on its own thread; this is the
+// last save on the way out.
+let shuttingDown = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => { saveHouse(sig); process.exit(0); });
+  process.on(sig, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    farm.stop().finally(() => process.exit(0));
+  });
 }
 
 // -------------------------------------------------------------------- routes
@@ -278,15 +376,20 @@ const server = http.createServer(async (req, res) => {
 
   // ---- house farm: watching is open to anyone ----
   if (route === '/api/house/stream') return openStream(req, res);
-  if (route === '/api/house/pheromones') return json(req, res, 200, house.pheromones());
+  if (route === '/api/house/pheromones') {
+    const r = await ask(req, res, 'pheromones');
+    return r && json(req, res, 200, r.value);
+  }
   if (route === '/api/house/status') {
     // Read-only and already public; the landing page on another domain shows it.
     res.setHeader('Access-Control-Allow-Origin', '*');
-    return json(req, res, 200, house.status());
+    const r = await ask(req, res, 'status');
+    return r && json(req, res, 200, r.value);
   }
   if (route === '/api/house/ant') {
-    const d = house.ant(Number(url.searchParams.get('i')));
-    return d ? json(req, res, 200, d) : json(req, res, 400, { error: 'No such ant.' });
+    const r = await ask(req, res, 'ant', Number(url.searchParams.get('i')));
+    if (!r) return;
+    return r.value ? json(req, res, 200, r.value) : json(req, res, 400, { error: 'No such ant.' });
   }
 
   // ---- house farm: changing it needs a keeper ----
@@ -297,8 +400,9 @@ const server = http.createServer(async (req, res) => {
     let action;
     try { action = JSON.parse(await readBody(req) || '{}'); }
     catch (e) { return json(req, res, 400, { ok: false, error: 'bad request' }); }
-    const result = house.act(action || {});
-    const s = house.status();
+    const r = await ask(req, res, 'act', action || {});
+    if (!r) return;
+    const { result, status: s } = r.value;
     return json(req, res, result.ok ? 200 : 400,
       Object.assign({}, result, { house: { autoTend: s.autoTend, speed: s.speed, paused: s.paused, name: s.name } }));
   }
