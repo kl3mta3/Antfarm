@@ -336,6 +336,40 @@ can keep supplying. It's still bounded by colony size, so a handful of nurses
 isn't handed forty larvae. With the fix, both test nests grew steadily past 85
 ants by tick 25,000.
 
+## The queen lives deep, and is fed
+
+**Each job uses the deepest finished room of its kind.** The queen's chamber, the
+nursery and the larder all follow that rule, so as the nest digs deeper rooms
+they move down into them. A room only counts once it's dug and reachable.
+
+- **At first**, the queen and her brood are in the founding chamber, and the
+  larder sits up in the entrance shaft, not in her room.
+- **As the colony grows**, the room programme keeps adding nurseries and larders,
+  and each new deeper one takes over. Nurses carry the brood down after it.
+- **For every 60 more ants**, once her current chamber is finished, a new royal
+  chamber is planned a few tiles below the deepest room. When it's dug she walks
+  down into it.
+
+**She never goes to the larder.** When she's hungry or thirsty, one nurse at a
+time collects food and water from the store, carries it down and feeds her. Only
+if the nest has no nurses at all does she live off the stores and her body
+reserves directly, the way a founding queen sealed in her chamber does. A nest
+with a queen always keeps at least one nurse.
+
+**Brood gets a place of its own.** Nurses carry eggs, larvae and pupae, not just
+eggs. Each is set down in a free spot on the nursery floor, away from what's
+already there and from where other nurses are heading. When the floor is crowded
+it goes on the pile, as real brood heaps up, instead of on top of another piece.
+
+Tested on a fresh colony:
+
+| | |
+|---|---|
+| Queen's energy, fed by a nurse | 40 → 77 |
+| Queen reaching her new chamber, 35 tiles down | about 2.5 minutes |
+| Brood moved into a new nursery | 8 of 8 |
+| New royal chamber at 62 ants | planned below the deepest room |
+
 ## Two farms: the house farm and your own
 
 The server hosts two things at once.

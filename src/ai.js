@@ -146,13 +146,140 @@
       const a = A.hd[i] + off;
       if (W.passableAt(A.x[i] + Math.cos(a) * 1.2, A.y[i] + Math.sin(a) * 1.2)) { chosen = off; break; }
     }
-    if (chosen === null) return;
+    // Waiting for a way through is on purpose, not stuck: without this the
+    // watchdog flagged it, and a long enough wait had the ant dig itself out.
+    if (chosen === null) { lastLoiter[i] = col.tick; return; }
     A.hd[i] += chosen * 0.15 + (Math.random() - 0.5) * 0.04;
     const s = A.spd[i] * C.WALK_PACE * (speedScale || 0.7);
     const nx = A.x[i] + Math.cos(A.hd[i]) * s, ny = A.y[i] + Math.sin(A.hd[i]) * s;
     if (W.passableAt(nx, ny)) {
       A.x[i] = nx; A.y[i] = ny;
       A.sDist[i] += s;
+    } else {
+      lastLoiter[i] = col.tick;
+    }
+  }
+
+  // Moving on the spot: a sway side to side and a turn of the head, with no
+  // net travel — each tick applies only the change in a sine, so the ant
+  // always swings back to where it started. What an ant busy at something
+  // looks like, rather than a frozen one.
+  function fidget(i, amp, rate) {
+    lastLoiter[i] = col.tick;              // standing still here is on purpose
+    const t = col.tick + i * 7;
+    const d = Math.sin(t * rate) - Math.sin((t - 1) * rate);
+    const nx = A.x[i] - Math.sin(A.hd[i]) * amp * d;
+    const ny = A.y[i] + Math.cos(A.hd[i]) * amp * d;
+    if (W.passableAt(nx, ny)) { A.x[i] = nx; A.y[i] = ny; }
+    A.hd[i] += (Math.cos(t * rate * 1.7) - Math.cos((t - 1) * rate * 1.7)) * 0.35;
+  }
+
+  // Does the queen need food or water brought to her, with nobody already on
+  // the way? One nurse at a time does the run.
+  function queenWantsFeeding(nest) {
+    const q = nest.queen;
+    if (q < 0 || !A.alive[q]) return false;
+    if (A.energy[q] > 65 && A.hydration[q] > 65) return false;
+    const f = nest.queenFeeder;
+    if (f >= 0 && A.alive[f] && A.nest[f] === nest.id &&
+        (A.state[f] === ST.FETCH_ROYAL || A.state[f] === ST.TO_QUEEN || A.state[f] === ST.FEED_QUEEN)) {
+      return false;
+    }
+    return true;
+  }
+
+  // A free place on the nursery floor for a piece of brood: the candidate
+  // furthest from anything already lying there, settled onto the floor. Each
+  // egg, larva and pupa gets its own spot instead of landing on the last one.
+  function broodSpot(bc) {
+    // Everything already taking up room: brood lying there, and the spots
+    // other nurses are on their way to. Without the second, two nurses
+    // carrying brood at once picked the same place.
+    const taken = [];
+    const r2 = (bc.r + 1) * (bc.r + 1);
+    for (let b = 0; b < C.MAX_BROOD; b++) {
+      if (B.alive[b] && B.held[b] < 0 && dist2(B.x[b], B.y[b], bc.x, bc.y) < r2) {
+        taken.push(B.x[b], B.y[b]);
+      }
+    }
+    for (let j = 0; j < C.MAX_ANTS; j++) {
+      if (A.alive[j] && A.state[j] === ST.HAUL_EGG && A.carry[j] === CARRY.EGG &&
+          A.memx[j] >= 0 && dist2(A.memx[j], A.memy[j], bc.x, bc.y) < r2) {
+        taken.push(A.memx[j], A.memy[j]);
+      }
+    }
+    const gapAt = (x, y) => {
+      let g = 81;
+      for (let k = 0; k < taken.length; k += 2) g = Math.min(g, dist2(x, y, taken[k], taken[k + 1]));
+      return g;
+    };
+
+    let best = null, bestGap = -1;
+    for (let k = 0; k < 28; k++) {
+      const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * bc.r * 0.8;
+      const x = bc.x + Math.cos(a) * r, y = bc.y + Math.sin(a) * r;
+      if (!W.passableAt(x, y)) continue;
+      // Prefer the floor of the chamber. A small chamber's floor fills up
+      // fast, though, so if the floor there is crowded the brood goes on the
+      // pile instead — the way real brood heaps up — rather than on top of
+      // another piece.
+      let fy = Math.floor(y);
+      while (fy + 1 < bc.y + bc.r && W.passable(Math.floor(x), fy + 1)) fy++;
+      const floorY = fy + 0.6;
+      const onFloor = gapAt(x, floorY);
+      const spot = onFloor >= 0.8 ? { x, y: floorY, g: onFloor } : { x, y, g: gapAt(x, y) };
+      if (spot.g > bestGap) { bestGap = spot.g; best = { x: spot.x, y: spot.y }; }
+      if (bestGap >= 1.3) break;
+    }
+    return best;
+  }
+
+  // A nurse with nothing urgent does rounds of the nursery: walks to a brood
+  // item, stops to fuss over it for a little while, then on to the next. Real
+  // nurses keep circulating among the brood rather than standing about.
+  function tendRound(i, nest, bc) {
+    if (A.timer[i] > 0) { A.timer[i]--; fidget(i, 0.12, 0.18); return; }
+
+    const gx = A.memx[i], gy = A.memy[i];
+    const arrived = gx >= 0 && dist2(A.x[i], A.y[i], gx, gy) < 0.8;
+    const stale = gx < 0 || dist2(gx, gy, bc.x, bc.y) > bc.r * bc.r * 1.5;
+    if (arrived || stale) {
+      if (arrived) A.timer[i] = 40 + ((Math.random() * 110) | 0);
+
+      // Next stop: one of our brood in the chamber, or else a spot on its floor.
+      const here = [];
+      for (let b = 0; b < C.MAX_BROOD; b++) {
+        if (B.alive[b] && B.nest[b] === nest.id && B.held[b] < 0 &&
+            dist2(B.x[b], B.y[b], bc.x, bc.y) < (bc.r + 1) * (bc.r + 1)) here.push(b);
+      }
+      let px = -1, py = -1;
+      if (here.length) {
+        const b = here[(Math.random() * here.length) | 0];
+        px = B.x[b] + (Math.random() - 0.5) * 1.2;
+        py = B.y[b] + (Math.random() - 0.5) * 1.2;
+      }
+      if (px < 0 || !W.passableAt(px, py)) {
+        for (let k = 0; k < 10; k++) {
+          const a = Math.random() * TAU, r = Math.random() * bc.r * 0.8;
+          const tx = bc.x + Math.cos(a) * r, ty = bc.y + Math.sin(a) * r;
+          if (W.passableAt(tx, ty)) { px = tx; py = ty; break; }
+        }
+      }
+      A.memx[i] = px;
+      A.memy[i] = px < 0 ? -1 : py;
+      if (px < 0) fidget(i, 0.12, 0.18);
+      return;
+    }
+
+    // Unhurried walk to the next stop. Blocked: pick another.
+    steer(i, Math.atan2(gy - A.y[i], gx - A.x[i]), 0.25);
+    const s = A.spd[i] * C.WALK_PACE * 0.6;
+    const nx = A.x[i] + Math.cos(A.hd[i]) * s, ny = A.y[i] + Math.sin(A.hd[i]) * s;
+    if (W.passableAt(nx, ny)) {
+      A.x[i] = nx; A.y[i] = ny;
+      A.sDist[i] += s;
+    } else {
+      A.memx[i] = -1;
     }
   }
 
@@ -750,6 +877,20 @@
       }
 
       case ST.DIGGING: {
+        // Working the face. A cut takes a while, so rather than stand frozen
+        // the ant faces the soil, rocks side to side and nods into it. It
+        // always swings back to where it started (only the change in a sine
+        // is applied), so it never drifts off the tile it's cutting.
+        if (A.digTile[i] >= 0) {
+          const tile = A.digTile[i];
+          const face = Math.atan2(((tile / C.W) | 0) + 0.5 - A.y[i], (tile % C.W) + 0.5 - A.x[i]);
+          const t = col.tick + i * 7, rate = 0.2;
+          const d = Math.sin(t * rate) - Math.sin((t - 1) * rate);
+          const nx = A.x[i] - Math.sin(face) * 0.25 * d;
+          const ny = A.y[i] + Math.cos(face) * 0.25 * d;
+          if (W.passableAt(nx, ny)) { A.x[i] = nx; A.y[i] = ny; }
+          A.hd[i] = face + Math.sin(t * rate * 1.6) * 0.35;
+        }
         A.timer[i]--;
         if (A.timer[i] <= 0) {
           const tile = A.digTile[i];
@@ -919,7 +1060,15 @@
         if (aboveGround(i)) { headInside(i, nest); break; }
         const inChamber = dist2(A.x[i], A.y[i], bc.x, bc.y) < bc.r * bc.r * 1.4;
 
+        // Still holding the queen's food (interrupted on the way): carry on.
+        if (A.carry[i] === CARRY.FOOD && nest.queen >= 0) {
+          nest.queenFeeder = i;
+          setState(i, ST.TO_QUEEN);
+          break;
+        }
+
         if ((col.tick + i) % 20 === 0) {
+          if (queenWantsFeeding(nest)) { nest.queenFeeder = i; setState(i, ST.FETCH_ROYAL); break; }
           if (nest.looseEggs.length && Math.random() < 0.6) {
             const b = nest.looseEggs[(Math.random() * nest.looseEggs.length) | 0];
             if (B.alive[b] && B.held[b] < 0) { A.target[i] = b; setState(i, ST.HAUL_EGG); break; }
@@ -930,7 +1079,7 @@
           }
         }
         if (!inChamber) navDown(i, nest.fBrood, bc.x, bc.y);
-        else loiter(i, bc.x, bc.y, bc.r * 0.9);
+        else tendRound(i, nest, bc);
         break;
       }
 
@@ -968,23 +1117,97 @@
       }
 
       case ST.HAUL_EGG: {
+        // Eggs, larvae and pupae alike: anything lying outside the nursery
+        // (including when the nursery moves deeper) is carried in and set down
+        // in a free spot of its own.
         const b = A.target[i];
         if (b < 0 || !B.alive[b]) { A.target[i] = -1; setState(i, ST.TEND); break; }
         if (A.carry[i] === CARRY.EGG) {
           B.x[b] = A.x[i]; B.y[b] = A.y[i];
-          if (dist2(A.x[i], A.y[i], bc.x, bc.y) < (bc.r * 0.6) * (bc.r * 0.6)) {
+          const inside = dist2(A.x[i], A.y[i], bc.x, bc.y) < bc.r * bc.r;
+          const gx = A.memx[i], gy = A.memy[i];
+          if (inside && (gx < 0 || dist2(A.x[i], A.y[i], gx, gy) < 0.35)) {
             B.held[b] = -1;
-            A.carry[i] = CARRY.NONE; A.target[i] = -1;
+            A.carry[i] = CARRY.NONE; A.target[i] = -1; A.memx[i] = -1;
             col.log(i, 7);
             setState(i, ST.TEND);
+          } else if (inside) {
+            steer(i, Math.atan2(gy - A.y[i], gx - A.x[i]), 0.35);
+            if (!tunnelStep(i)) A.memx[i] = -1;       // can't get there: set it down here
           } else navDown(i, nest.fBrood, bc.x, bc.y);
         } else {
           if (B.held[b] >= 0) { A.target[i] = -1; setState(i, ST.TEND); break; }
           const d = dist2(A.x[i], A.y[i], B.x[b], B.y[b]);
-          if (d < 1.2) { B.held[b] = i; A.carry[i] = CARRY.EGG; A.carryAmt[i] = 1; }
+          if (d < 1.2) {
+            B.held[b] = i; A.carry[i] = CARRY.EGG; A.carryAmt[i] = 1;
+            const spot = broodSpot(bc);
+            A.memx[i] = spot ? spot.x : -1;
+            A.memy[i] = spot ? spot.y : -1;
+          }
           else if (d > 36) navDown(i, nest.fQueen, B.x[b], B.y[b]);
           else { steer(i, Math.atan2(B.y[b] - A.y[i], B.x[b] - A.x[i]), 0.3); tunnelStep(i); }
         }
+        break;
+      }
+
+      // ---- feeding the queen ----
+      // She never leaves her chamber. A nurse collects food and water from the
+      // larder and carries it down to her.
+      case ST.FETCH_ROYAL: {
+        if (aboveGround(i)) { headInside(i, nest); break; }
+        const s = NS.store(nest);
+        navDown(i, nest.fStore, s.x, s.y);
+        if (atField(i, nest.fStore, 1) || dist2(A.x[i], A.y[i], s.x, s.y) < s.r * s.r) {
+          const food = Math.min(3, Math.max(0, nest.res.food - 1));
+          const water = Math.min(3, Math.max(0, nest.res.water - 1));
+          if (food + water < 0.5) { nest.queenFeeder = -1; setState(i, ST.TEND); break; }
+          nest.res.food -= food;
+          nest.res.water -= water;
+          A.carry[i] = CARRY.FOOD;
+          A.carryAmt[i] = food;
+          A.ty[i] = water;                 // the water, carried with it
+          setState(i, ST.TO_QUEEN);
+        }
+        break;
+      }
+
+      case ST.TO_QUEEN: {
+        const q = nest.queen;
+        if (q < 0 || !A.alive[q]) {
+          nest.res.food += A.carryAmt[i];      // no queen to feed: back to the larder
+          nest.res.water += A.ty[i];
+          A.carry[i] = CARRY.NONE; A.carryAmt[i] = 0; A.ty[i] = 0;
+          nest.queenFeeder = -1;
+          setState(i, ST.TEND);
+          break;
+        }
+        if (aboveGround(i)) { headInside(i, nest); break; }
+        const d = dist2(A.x[i], A.y[i], A.x[q], A.y[q]);
+        if (d < 2.2) { setState(i, ST.FEED_QUEEN); A.timer[i] = 60; break; }
+        if (d > 25) navDown(i, nest.fQueen, A.x[q], A.y[q]);
+        else { steer(i, Math.atan2(A.y[q] - A.y[i], A.x[q] - A.x[i]), 0.3); tunnelStep(i); }
+        break;
+      }
+
+      case ST.FEED_QUEEN: {
+        const q = nest.queen;
+        const alive = q >= 0 && A.alive[q];
+        if (alive) A.hd[i] = Math.atan2(A.y[q] - A.y[i], A.x[q] - A.x[i]);
+        A.timer[i]--;
+        if (A.timer[i] > 0) break;
+        // Same exchange rate she used to bill the larder at: 0.08 food per
+        // point of energy, and the same for water.
+        if (alive) {
+          A.energy[q] = Math.min(C.ENERGY_MAX, A.energy[q] + A.carryAmt[i] / 0.08);
+          A.hydration[q] = Math.min(C.HYDRATION_MAX, A.hydration[q] + A.ty[i] / 0.08);
+          col.log(i, 26);
+        } else {
+          nest.res.food += A.carryAmt[i];
+          nest.res.water += A.ty[i];
+        }
+        A.carry[i] = CARRY.NONE; A.carryAmt[i] = 0; A.ty[i] = 0;
+        nest.queenFeeder = -1;
+        setState(i, ST.TEND);
         break;
       }
 
@@ -1186,7 +1409,14 @@
         }
         // Nothing to do: drift around the nest rather than stand still.
         if (aboveGround(i)) headInside(i, nest);
-        else loiter(i);
+        else {
+          // No bodies to deal with: walk the tunnels on the lookout, stopping
+          // now and then, and never wandering far from home.
+          const s = NS.store(nest);
+          if (dist2(A.x[i], A.y[i], s.x, s.y) > 28 * 28) navDown(i, nest.fStore, s.x, s.y);
+          else if ((col.tick + i * 11) % 320 < 70) fidget(i, 0.12, 0.15);
+          else stroll(i, 0.5);
+        }
         break;
       }
 
@@ -1288,16 +1518,19 @@
       A.state[i] = ST.LAY;
     }
 
-    // She is fed by attendants; we just bill the nest. With the larder empty
-    // and no workers left to fill it she lives off body reserves, the way a
-    // founding queen sealed in a chamber does.
-    if (A.energy[i] < 70) {
-      if (nest.res.food > 2) { nest.res.food -= 0.02 * LIFE; A.energy[i] += 0.25 * LIFE; }
-      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.energy[i] += 0.25 * LIFE; }
-    }
-    if (A.hydration[i] < 70) {
-      if (nest.res.water > 2) { nest.res.water -= 0.02 * LIFE; A.hydration[i] += 0.25 * LIFE; }
-      else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.hydration[i] += 0.25 * LIFE; }
+    // Her nurses bring her food and water (see FETCH_ROYAL); she never goes to
+    // the larder. Only with no nurse left to bring anything does she live off
+    // the stores and her body reserves directly, the way a founding queen
+    // sealed in her chamber does.
+    if (nest.castePop[CASTE.NURSE] === 0) {
+      if (A.energy[i] < 70) {
+        if (nest.res.food > 2) { nest.res.food -= 0.02 * LIFE; A.energy[i] += 0.25 * LIFE; }
+        else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.energy[i] += 0.25 * LIFE; }
+      }
+      if (A.hydration[i] < 70) {
+        if (nest.res.water > 2) { nest.res.water -= 0.02 * LIFE; A.hydration[i] += 0.25 * LIFE; }
+        else if (nest.res.biomass > 5) { nest.res.biomass -= 0.05 * LIFE; A.hydration[i] += 0.25 * LIFE; }
+      }
     }
 
     A.timer[i] += LIFE;                  // laying keeps colony time
@@ -1441,7 +1674,7 @@
   // States where standing still is the job, not a fault.
   function stationary(s) {
     return s === ST.EATING || s === ST.DRINKING || s === ST.DIGGING ||
-           s === ST.FEEDING || s === ST.LAY || s === ST.REST;
+           s === ST.FEEDING || s === ST.LAY || s === ST.REST || s === ST.FEED_QUEEN;
   }
 
   function stepAnt(i) {
@@ -1461,7 +1694,13 @@
       A.lx[i] = A.sDist[i];
       // Standing still is fine for an ant that is loitering on purpose.
       const loitering = Math.abs(col.tick - lastLoiter[i]) <= 2;
-      if (travelled < 0.8 && !stationary(A.state[i]) && !loitering) A.stuck[i] += 60;
+      // "No headway" is judged against what this ant could cover in the
+      // window: half its possible distance, capped at the old 0.8 tiles. A
+      // fixed 0.8 flagged the queen at half walking pace (she can only manage
+      // 0.66) every minute, and the watchdog kept turning her around and
+      // eventually had her dig her way "out" of her own chamber.
+      const expected = Math.min(0.8, A.spd[i] * C.WALK_PACE * 60 * 0.5);
+      if (travelled < expected && !stationary(A.state[i]) && !loitering) A.stuck[i] += 60;
       else A.stuck[i] = 0;
     }
 
@@ -1566,7 +1805,10 @@
   function rebalanceLabour(nest) {
     if (nest.count < 3) return;
 
-    const needNurses = nest.broodPop[1] > 0 ? Math.max(2, Math.ceil(nest.broodPop[1] / 6)) : 0;
+    // At least one nurse whenever there's a queen: she's fed by them.
+    const needNurses = nest.broodPop[1] > 0
+      ? Math.max(2, Math.ceil(nest.broodPop[1] / 6))
+      : (nest.queen >= 0 ? 1 : 0);
     if (nest.castePop[CASTE.NURSE] < needNurses) {
       col.retask(nest, CASTE.NURSE, nest.castePop[CASTE.DIGGER] > 2 ? CASTE.DIGGER : null);
     }
@@ -1940,8 +2182,11 @@
       case ST.TO_LARVA: return 'That larva is hungry. Going to it.';
       case ST.FEEDING: return 'Feeding. It grows only while it eats.';
       case ST.HAUL_EGG: return A.carry[i] === CARRY.EGG
-        ? 'This egg is in the wrong place. Carrying it to the nursery.'
-        : 'An egg, loose on the floor. Pick it up.';
+        ? 'This belongs in the nursery. Find it a spot of its own.'
+        : 'Brood lying where it shouldn\'t be. Pick it up.';
+      case ST.FETCH_ROYAL: return 'The queen is hungry. Fetch her food and water from the larder.';
+      case ST.TO_QUEEN: return 'Carrying her meal down to the royal chamber.';
+      case ST.FEED_QUEEN: return 'Feeding the queen.';
       case ST.GO_EAT: return 'Running low. Heading to the store.';
       case ST.EATING: return 'Eating.';
       case ST.GO_DRINK: return 'Parched. The store should have water.';

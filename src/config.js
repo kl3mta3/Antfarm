@@ -226,16 +226,18 @@
     SEEK_WATER: 21, TO_WATER: 22, GO_DRINK: 23, DRINKING: 24,
     RAID_OUT: 25, RAID_TAKE: 26, RAID_HOME: 27, AVOID: 28,
     SEEK_BODY: 29, TO_BODY: 30, HAUL_BODY: 31, DUMP_BODY: 32,
+    FETCH_ROYAL: 33, TO_QUEEN: 34, FEED_QUEEN: 35,
   };
   AF.ST_NAME = [
     'Idle', 'Heading out', 'Searching', 'Closing on food', 'Hauling food', 'Storing food',
     'Walking to dig site', 'Digging', 'Hauling spoil', 'Dumping spoil',
-    'Tending brood', 'Approaching larva', 'Feeding larva', 'Carrying an egg',
+    'Tending brood', 'Approaching larva', 'Feeding larva', 'Moving brood',
     'Going to eat', 'Eating', 'Laying', 'Patrolling', 'Responding to alarm', 'Fighting', 'Resting',
     'Searching for water', 'Closing on water', 'Going to drink', 'Drinking',
     'Raiding a neighbour', 'Robbing their larder', 'Carrying off the spoils',
     'Backing away',
     'Looking for the dead', 'Going to a body', 'Carrying a body', 'Laying it out',
+    'Collecting food for the queen', 'Taking food to the queen', 'Feeding the queen',
   ];
 
   // Per-ant event log codes
@@ -247,7 +249,7 @@
     'dumped spoil on the mound', // 4
     'ate from the stores',       // 5
     'fed a larva',               // 6
-    'moved an egg to the nursery', // 7
+    'moved brood to the nursery', // 7
     'attacked an intruder',      // 8
     'was wounded',               // 9
     'laid an egg',               // 10
@@ -266,5 +268,6 @@
     'brought home a stranger\'s body', // 23
     'broke into buried food',    // 24
     'turned back, low on water', // 25
+    'fed the queen',             // 26
   ];
 })();

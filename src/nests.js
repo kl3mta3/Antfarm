@@ -48,6 +48,8 @@
       castePop: new Array(AF.NCASTE).fill(0),
       broodPop: [0, 0, 0],
       queen: -1,
+      queenFeeder: -1,    // the nurse currently bringing the queen food, if any
+      roomGen: 0,         // how many times the queen, brood and larder have been given deeper rooms
       pendingSpoil: 0,
       hungryLarvae: [],
       looseEggs: [],
@@ -487,6 +489,36 @@
       return;
     }
 
+    // A growing colony moves its queen deeper. For every 60 more ants, once her
+    // current chamber is finished, a new royal chamber is planned a few tiles
+    // below the deepest room the nest has dug. When it's ready she moves down
+    // into it (see refreshRoles). Nurseries and larders need no such step: the
+    // room programme below keeps adding them, and each job always uses the
+    // deepest finished room of its kind. Queued ahead of the open-face limit,
+    // so a busy nest still gets it.
+    const gen = Math.floor(nest.count / 60);
+    if (gen > (nest.roomGen || 0)) {
+      const royal = nest._queen;
+      const settled = royal && royal.type === 'queen';
+      const pending = nest.plan.some(n => n.type === 'queen' && n.built < 1 && !n.abandoned);
+      if (settled && !pending) {
+        const rooms = nest.plan.filter(n =>
+          n.built >= 1 && !n.abandoned && n.type !== 'entrance' && n.type !== 'breach');
+        const floor = rooms.reduce((m, n) => Math.max(m, n.y + n.r), royal.y + royal.r);
+        const r = 4.4;
+        for (let attempt = 0; attempt < 12; attempt++) {
+          const nx = royal.x + (Math.random() * 20 - 10);
+          const ny = floor + r + 4 + Math.random() * 6;
+          if (nx < 12 || nx > AF.CFG.W - 12 || ny > AF.CFG.H - 12) continue;
+          if (W.tileAt(Math.floor(nx), Math.floor(ny)) === T.ROCK) continue;
+          if (roomClashes(nest, nx, ny, r)) continue;
+          nest.queenNode = addNode(nest, nx, ny, r, 'queen');
+          nest.roomGen = gen;
+          return;
+        }
+      }
+    }
+
     if (digging >= 2) return;
 
     // A colony digs as much room as it has ants to need it, and keeps going for
@@ -557,15 +589,50 @@
 
   // ----------------------------------------------------------------- fields
 
-  // A chamber only counts once it is dug AND reachable from its own entrance.
-  function pickChamber(nest, node, minProgress) {
-    if (!node || W.nodeProgress(node) < minProgress) return nest.founding;
+  // Would a room here sit on top of another? Our own rooms keep a clear gap;
+  // a neighbour's only needs the room itself kept clear.
+  function roomClashes(nest, nx, ny, r) {
+    for (const other of nests.list) {
+      const gap = other === nest ? 3 : 1;
+      for (const n of other.plan) {
+        if (n.abandoned) continue;
+        if (Math.hypot(n.x - nx, n.y - ny) < n.r + r + gap) return true;
+      }
+    }
+    return false;
+  }
+
+  // Which room does each job right now. The deepest finished, reachable
+  // chamber of each kind wins, so as the nest digs deeper rooms the queen, her
+  // brood and the larder move down into them. Until a room of its kind is
+  // ready, the queen and brood stay in the founding chamber — and the larder
+  // sits up in the entrance shaft, not in the queen's own room.
+  function usable(nest, node, minProgress) {
+    if (!node || node.abandoned || W.nodeProgress(node) < minProgress) return false;
+    if (!nest.fHome) return true;
     const seeds = W.seedsFor(node);
     for (let k = 0; k < seeds.length; k++) {
-      if (nest.fHome[seeds[k]] >= 0) return node;
+      if (nest.fHome[seeds[k]] >= 0) return true;
     }
-    return nest.founding;
+    return false;
   }
+
+  function deepest(nest, type, minProgress) {
+    let best = null;
+    for (const n of nest.plan) {
+      if (n.type !== type || !usable(nest, n, minProgress)) continue;
+      if (!best || n.y > best.y) best = n;
+    }
+    return best;
+  }
+
+  nests.refreshRoles = function (nest) {
+    const f = nest.founding;
+    nest._queen = deepest(nest, 'queen', 0.5) || f;
+    nest._brood = deepest(nest, 'nursery', 0.35) || nest._queen;
+    nest._store = deepest(nest, 'store', 0.35) ||
+      { x: f.x, y: Math.max(W.surfaceAt(f.x) + 3, f.y - f.r - 4), r: 1.6 };
+  };
 
   // The nearest way in from where an ant is standing.
   nests.nearestEntrance = function (nest, x, y) {
@@ -584,9 +651,7 @@
       let seeds = [];
       for (const e of nest.entrances) seeds = seeds.concat(W.entranceSeeds(e));
       W.bfs(nest.fHome, seeds);
-      nest._store = pickChamber(nest, nest.storeNode, 0.35);
-      nest._brood = pickChamber(nest, nest.broodNode, 0.35);
-      nest._queen = pickChamber(nest, nest.queenNode, 0.5);
+      nests.refreshRoles(nest);
       W.bfs(nest.fStore, W.seedsFor(nest._store));
       W.bfs(nest.fBrood, W.seedsFor(nest._brood));
       W.bfs(nest.fQueen, W.seedsFor(nest._queen));
@@ -672,7 +737,7 @@
       broodIdx: n.plan.indexOf(n.broodNode),
       queenIdx: n.plan.indexOf(n.queenNode),
       res: n.res, stats: n.stats, queen: n.queen,
-      pendingSpoil: n.pendingSpoil, policy: n.policy,
+      pendingSpoil: n.pendingSpoil, policy: n.policy, roomGen: n.roomGen || 0,
     }));
   };
 
@@ -717,6 +782,7 @@
       for (const k in nest.stats) if (s.stats[k] != null) nest.stats[k] = s.stats[k];
       nest.queen = s.queen;
       nest.pendingSpoil = s.pendingSpoil || 0;
+      nest.roomGen = s.roomGen || 0;
       if (s.policy) nest.policy = s.policy;
       nests.list.push(nest);
     }

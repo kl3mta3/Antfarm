@@ -66,6 +66,7 @@
       nest.storeNode = nest.plan[s.storeIdx] || null;
       nest.broodNode = nest.plan[s.broodIdx] || null;
       nest.queenNode = nest.plan[s.queenIdx] || null;
+      NS.refreshRoles(nest);        // which rooms the queen, brood and larder are in now
       nest.res.food = s.res.food; nest.res.water = s.res.water; nest.res.biomass = s.res.biomass;
       for (const key in s.stats) nest.stats[key] = s.stats[key];
       if (s.policy) nest.policy = s.policy;
