@@ -52,7 +52,18 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
       log('House farm restored: tick ' + col.tick + ', ' + col.count + ' ants.');
       return true;
     } catch (e) {
-      if (e.code !== 'ENOENT') log('House farm save unreadable (' + e.message + '); starting fresh.');
+      if (e.code === 'ENOENT') {
+        log('No saved house farm at ' + dataFile + '; starting a new one.');
+        return false;
+      }
+      // Never overwrite a save that failed to load: the fresh farm started
+      // below would replace it within a minute, and the old farm would be gone
+      // for good. Set it aside so it can be looked at or recovered.
+      const aside = dataFile + '.unreadable-' + Date.now();
+      let moved = false;
+      try { fs.renameSync(dataFile, aside); moved = true; } catch (err) { /* leave it where it is */ }
+      log('House farm save could not be loaded (' + e.message + '); starting a new one. ' +
+        (moved ? 'The old save was kept as ' + aside + '.' : 'The old save could not be moved aside.'));
       return false;
     }
   }
@@ -64,13 +75,39 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
       house: { autoTend: house.autoTend, speed: house.speed, paused: house.paused, name: house.name },
     });
     // Write beside and rename, so a crash mid-write can't leave half a farm.
-    fs.mkdirSync(path.dirname(dataFile), { recursive: true });
-    const tmp = dataFile + '.tmp';
-    fs.writeFileSync(tmp, payload);
-    fs.renameSync(tmp, dataFile);
+    try {
+      fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+      const tmp = dataFile + '.tmp';
+      fs.writeFileSync(tmp, payload);
+      fs.renameSync(tmp, dataFile);
+    } catch (e) {
+      house.saveError = e.code || e.message;
+      throw e;
+    }
+    if (!house.lastSaved) log('House farm saved to ' + dataFile + ' — saving works.');
+    house.lastSaved = Date.now();
+    house.saveError = null;
   };
 
   if (!load()) { W.generate(1); col.reset(1); }
+
+  // Find out now, not a minute from now, whether the farm can be saved at all.
+  // A save folder that can't be written means the farm is lost on every
+  // restart or redeploy, and until now the only sign was an error in the log.
+  (function checkWritable() {
+    const probe = dataFile + '.write-test';
+    try {
+      fs.mkdirSync(path.dirname(dataFile), { recursive: true });
+      fs.writeFileSync(probe, 'ok');
+      fs.unlinkSync(probe);
+    } catch (e) {
+      house.saveError = e.code || e.message;
+      log('WARNING: the house farm cannot be saved. ' + path.dirname(dataFile) + ' is not writable (' +
+        (e.code || e.message) + '), so the farm will be lost on every restart and redeploy. Check the volume ' +
+        'mounted there, and that it can be written by the user this server runs as' +
+        (process.getuid ? ' (uid ' + process.getuid() + ')' : '') + '.');
+    }
+  })();
 
   // -------------------------------------------------------------- tending
   // The same ration the browser's auto-tend hands out: water near each door,
@@ -368,6 +405,9 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
       tick: col.tick, day: Math.floor(col.lifeTick / C.DAY_TICKS) + 1,
       ants: col.count, nests: NS.list.filter(n => n.alive).length,
       tickMs: Math.round(house.tickMs * 1000) / 1000, ...controls(),
+      // Whether the farm is being kept: 'ok', or 'failing' (see the log for why).
+      saving: house.saveError ? 'failing' : 'ok',
+      lastSavedSecondsAgo: house.lastSaved ? Math.round((Date.now() - house.lastSaved) / 1000) : null,
     };
   };
 
