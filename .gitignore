@@ -2,8 +2,8 @@
 .env
 .env.*
 !.env.example
-/data/
+*data/
 *.log
 *house.json
 data/house.json
-data/house.json
+
