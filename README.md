@@ -514,35 +514,23 @@ entrance shaft running up through it.
 
 **Real time: a day in the farm is a day out here.**
 
-The farm runs two clocks.
+At 1× everything runs in real time: ants walk at half the pace they used to
+(`WALK_PACE`), cutting a tile loose takes about 66 seconds (`DIG_SLOW`), and a
+colony day takes a real day (`DAY_TICKS`).
 
-- **Movement** always runs at 20 ticks a second. Walking, carrying, digging a
-  tile and fighting look the same at every speed.
-- **Life** is everything biological: ageing, hunger and thirst, eggs and larvae
-  growing, the queen laying, bodies rotting, puddles drying, the weather wearing
-  down the spoil heap, and how often beetles turn up. It runs on its own clock,
-  where `DAY_TICKS` make one colony day. At 1× that day takes a real day.
+The **speed slider speeds up all of it together.** It sets how many ticks run
+each second, so walking, carrying, digging, eating, fighting, ageing, the queen
+laying and brood growing all go faster by the same amount. At 24× a colony day
+passes in an hour with a full day's worth of everything done in it. It locks
+onto stops from 1× to 24× (`[` and `]` step it).
 
-The **speed slider** only moves the life clock. It locks onto stops from 1× up
-to 24×, where a colony day passes in an hour (`[` and `]` step it). The ants
-don't rush about at 24×; they just live their lives faster.
+The cost is CPU: 24× runs 24 times as many ticks a second. That's fine for a
+colony of a few hundred, but a very large colony at 24× may not keep up, in
+which case the farm simply runs a little slower than the setting.
 
-**Digging sits between the two clocks.** Walking to the face and carrying spoil
-out keep movement pace, but cutting a tile loose is slow. It takes about 66
-seconds at 1×, shrinking with the square root of the speed to about 13 seconds
-at 24× (`DIG_SLOW`). The cut has to be that slow to matter: a digger's trip out
-with the spoil takes about 30 seconds, and anything shorter left the cut a small
-part of the cycle. Measured on a new colony:
+A farm takes a long time to dig out at 1×, as a real one would.
 
-| | Tiles dug per real minute |
-|---|---|
-| Before (a cut every second) | 32.7 |
-| 1× | 2.3 |
-| 24× | 9 |
-
-A farm takes a long time to dig out, as a real one would.
-
-Because life is slow, the numbers are realistic-ish:
+The numbers are realistic-ish:
 
 | | Colony time |
 |---|---|
@@ -556,14 +544,9 @@ place the farm cheats, so a new farm shows its first brood coming through at the
 faster speeds. With workers living months, each one does far more work, and the
 queen needs far fewer eggs to keep the colony going.
 
-One thing deliberately stays on the movement clock: how quickly a queen forgets
-the scent of neighbours. Her workers spot strangers at walking pace, and if the
-forgetting slowed 160× while the sightings didn't, every queen would be on
-maximum alert forever.
-
-Ages are 64-bit numbers. At 1× an ant ages a tiny fraction of a tick per
-movement tick, and in 32-bit floats that step rounds away to nothing after about
-ten colony days; a months-long life would simply stop ageing.
+Ages are 64-bit numbers. An ant ages a tiny fraction of a day each tick, and in
+32-bit floats that step rounds away to nothing after about ten colony days; a
+months-long life would simply stop ageing.
 
 The loop takes fixed steps against the wall clock, so it holds its pace whether
 the page renders at 60fps or 30, and a long stall (a sleeping laptop) is dropped

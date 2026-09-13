@@ -137,11 +137,13 @@
     acc += dt;
     let budget = 0;
     while (acc >= STEP_MS && budget < maxSteps) {
-      // One movement tick per step at every speed; the speed setting moves
-      // only the life clock (see sim.lifeRate).
-      sim.tick();
-      tickCounter++;
-      if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; tend(); }
+      // The speed setting is how many ticks run per step: at 24×, 24 times as
+      // much of everything happens each second.
+      for (let s = 0; s < sim.speed; s++) {
+        sim.tick();
+        tickCounter++;
+        if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; tend(); }
+      }
       acc -= STEP_MS;
       budget++;
     }

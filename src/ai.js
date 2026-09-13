@@ -16,10 +16,12 @@
 
   const sim = { paused: false, speed: 1 };
 
-  // How far the life clock moves per movement tick. At 1× a colony day
-  // (DAY_TICKS) takes a real day of movement ticks.
+  // How far colony time moves per tick. Fixed: DAY_TICKS of colony time take
+  // a real day of ticks at 1×. The speed slider doesn't touch this — it runs
+  // more ticks a second, so everything (walking, digging, ageing) speeds up
+  // together and a colony day at 24× really is a day's worth of everything.
   sim.lifeRate = function () {
-    return sim.speed * C.DAY_TICKS / (86400 * C.BASE_HZ);
+    return C.DAY_TICKS / (86400 * C.BASE_HZ);
   };
   let LIFE = sim.lifeRate();      // refreshed every tick
   let lifeBefore = 0;
@@ -30,10 +32,10 @@
     return Math.floor(col.lifeTick / n) !== Math.floor(lifeBefore / n);
   }
 
-  // How long one cut takes, in movement ticks: between the two clocks. Slow
-  // and deliberate at real time, brisker as life speeds up (see DIG_SLOW).
+  // How long one cut takes, in ticks. Slow and deliberate (see DIG_SLOW); the
+  // speed slider speeds it up along with everything else.
   function digTicks() {
-    return Math.round(C.DIG_TICKS * Math.max(1, C.DIG_SLOW / Math.sqrt(sim.speed)));
+    return Math.round(C.DIG_TICKS * C.DIG_SLOW);
   }
   AF.sim = sim;
 
@@ -69,7 +71,7 @@
     else if (Math.random() < 0.012) A.hd[i] = Math.random() < 0.5 ? 0 : Math.PI;
 
     const dir = Math.cos(A.hd[i]) >= 0 ? 1 : -1;
-    let nx = A.x[i] + dir * A.spd[i];
+    let nx = A.x[i] + dir * A.spd[i] * C.WALK_PACE;
     if (nx < 3) { nx = 3; A.hd[i] = 0; }
     if (nx > C.W - 3) { nx = C.W - 3; A.hd[i] = Math.PI; }
     A.sDist[i] += Math.abs(nx - A.x[i]);
@@ -78,7 +80,7 @@
   }
 
   function tunnelStep(i) {
-    const s = A.spd[i];
+    const s = A.spd[i] * C.WALK_PACE;
     const nx = A.x[i] + Math.cos(A.hd[i]) * s;
     const ny = A.y[i] + Math.sin(A.hd[i]) * s;
     if (W.passableAt(nx, ny)) {
@@ -122,7 +124,7 @@
     A.hd[i] += wrapAngle(want - A.hd[i]) * 0.08;
 
     // A slow amble. Blocked ahead? Then it simply stays put.
-    const s = A.spd[i] * 0.4;
+    const s = A.spd[i] * C.WALK_PACE * 0.4;
     const nx = A.x[i] + Math.cos(A.hd[i]) * s, ny = A.y[i] + Math.sin(A.hd[i]) * s;
     if (W.passableAt(nx, ny)) {
       A.x[i] = nx; A.y[i] = ny;
@@ -146,7 +148,7 @@
     }
     if (chosen === null) return;
     A.hd[i] += chosen * 0.15 + (Math.random() - 0.5) * 0.04;
-    const s = A.spd[i] * (speedScale || 0.7);
+    const s = A.spd[i] * C.WALK_PACE * (speedScale || 0.7);
     const nx = A.x[i] + Math.cos(A.hd[i]) * s, ny = A.y[i] + Math.sin(A.hd[i]) * s;
     if (W.passableAt(nx, ny)) {
       A.x[i] = nx; A.y[i] = ny;
@@ -266,7 +268,7 @@
   // without asking that question just means dying further from the nest.
   function canGetHome(i, nest) {
     const away = Math.abs(A.x[i] - nest.entrance.x);
-    const ticksHome = away / Math.max(0.02, A.spd[i]);
+    const ticksHome = away / Math.max(0.01, A.spd[i] * C.WALK_PACE);
     const needed = ticksHome * C.THIRST_DRAIN * LIFE * C.RETURN_MARGIN + C.RETURN_RESERVE;
     return A.hydration[i] > needed;
   }
@@ -1819,7 +1821,7 @@
       const above = t.y < W.surfaceAt(t.x) - 0.25;
       if (above) {
         const dx = nest.entrance.x - t.x;
-        t.x += Math.sign(dx) * 0.075;
+        t.x += Math.sign(dx) * 0.075 * C.WALK_PACE;
         t.y = W.surfaceAt(t.x) - 0.6;
         if (dx) t.hd += wrapAngle((dx > 0 ? 0 : Math.PI) - t.hd) * 0.25;
         if (Math.abs(dx) < 1.2) {
@@ -1829,7 +1831,8 @@
       } else {
         const ang = W.downhill(nest.fBrood, t.x, t.y);
         const a = isNaN(ang) ? Math.random() * TAU : ang;
-        const nx = t.x + Math.cos(a) * 0.07, ny = t.y + Math.sin(a) * 0.07;
+        const step = 0.07 * C.WALK_PACE;
+        const nx = t.x + Math.cos(a) * step, ny = t.y + Math.sin(a) * step;
         if (W.passableAt(nx, ny)) {
           t.x = nx; t.y = ny;
           // Turn toward where it's going rather than snapping: with no scent

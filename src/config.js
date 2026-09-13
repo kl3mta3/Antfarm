@@ -22,12 +22,15 @@
     BASE_HZ: 20,
     TEND_EVERY: 120,   // ticks between auto-tend checks
 
-    // Two clocks. Movement always runs at BASE_HZ: an ant walks, digs and
-    // fights at the same pace whatever the speed. Life — ageing, hunger,
-    // brood growing, the queen laying — runs on its own clock, where DAY_TICKS
-    // make one colony day. At 1× that day is a real day; the speed slider only
-    // speeds up life, locking onto one of these stops.
+    // One clock. At 1× the farm runs in real time: a colony day takes a real
+    // day. The speed slider runs more ticks a second, so everything speeds up
+    // together — walking, digging, eating, ageing, the queen laying — and a
+    // colony day at 24× passes in an hour with a full day's work done in it.
+    // DAY_TICKS is how much colony time makes a day; biology is measured in it.
     DAY_TICKS: 10800,
+    // How fast ants walk at 1×, as a share of the per-tick caste speeds below.
+    // Real time looks like the farm did before, only slower.
+    WALK_PACE: 0.5,
     SPEED_STOPS: [1, 2, 3, 4, 6, 8, 12, 16, 24],
 
     MAX_ANTS: 6000,
@@ -84,13 +87,11 @@
 
     // ---- work ----
     DIG_TICKS: 22,         // movement ticks to loosen one tile, before DIG_SLOW
-    // Digging meets the two clocks in the middle. Walking and hauling keep
-    // movement pace, but the cut itself is slower: DIG_SLOW times longer at 1×
-    // (about 70 seconds a tile — an ant chewing soil loose), shrinking with the
-    // square root of the speed (about 15 seconds at 24×). It has to be this
-    // large to matter: a digger's round trip out with the spoil is ~600 ticks,
-    // so at 8× the cut was still a small part of the cycle and digging only
-    // halved. Without it a crew could dig out a farm in a day.
+    // Cutting a tile loose is slow: DIG_SLOW times DIG_TICKS, about 66 seconds
+    // at 1× (an ant chewing soil loose), and faster with the slider like
+    // everything else. It has to be this large to matter: a digger's trip out
+    // with the spoil is long, so a shorter cut was a small part of the cycle.
+    // Without it a crew could dig out a farm in a day.
     DIG_SLOW: 60,
     DIG_LOAD: 3,           // tiles cut before hauling the spoil out
     // What one ant brings back in a trip. Once food is scattered, the round

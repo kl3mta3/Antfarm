@@ -110,17 +110,20 @@ function createHouse({ root, dataFile, log = console.log }) {
     let steps = 0;
     const t0 = process.hrtime.bigint();
     let ticks = 0;
-    // One movement tick per step at every speed; speed moves only the life clock.
+    // Speed is how many ticks run per step: at 24×, 24 times as much of
+    // everything happens each second.
     sim.speed = house.speed;
     while (acc >= STEP_MS && steps < 40) {
-      try {
-        sim.tick();
-      } catch (e) {
-        // One bad tick must not take the farm down for everyone watching.
-        if (failures++ < 5) log('House farm tick failed: ' + (e.stack || e));
+      for (let s = 0; s < house.speed; s++) {
+        try {
+          sim.tick();
+        } catch (e) {
+          // One bad tick must not take the farm down for everyone watching.
+          if (failures++ < 5) log('House farm tick failed: ' + (e.stack || e));
+        }
+        ticks++;
+        if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; if (house.autoTend) tend(); }
       }
-      ticks++;
-      if (++tendTicks >= C.TEND_EVERY) { tendTicks = 0; if (house.autoTend) tend(); }
       acc -= STEP_MS;
       steps++;
     }
