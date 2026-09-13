@@ -1,0 +1,10 @@
+# Your keeper login. Never commit it.
+.env
+.env.*
+!.env.example
+
+# The house farm's save file from local runs
+data/
+
+node_modules
+*.log
