@@ -52,6 +52,7 @@ const ROOT = __dirname;
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
 };
 
@@ -133,7 +134,8 @@ function readBody(req, limit = 4096) {
 // the server's own source, the saved farm, Docker files — stays private.
 function staticPath(url) {
   if (url === '/' || url === '/play' || url === '/play/') return 'index.html';
-  if (/^\/src\/[a-z0-9_-]+\.js$/i.test(url)) return url.slice(1);
+  if (url === '/style.css') return 'style.css';
+  if (/^\/src\/[a-z0-9_-]+\.(js|css)$/i.test(url)) return url.slice(1);
   if (url === '/README.md') return 'README.md';
   return null;
 }

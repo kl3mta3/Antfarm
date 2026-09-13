@@ -3,7 +3,7 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY index.html server.js house.js ./
+COPY index.html style.css server.js house.js ./
 COPY src ./src
 
 # The house farm is saved here. Mount a volume so it survives the container.
