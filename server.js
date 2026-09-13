@@ -47,6 +47,11 @@ const DATA_FILE = process.env.ANTFARM_DATA || path.join(__dirname, 'data', 'hous
 const FRAME_HZ = Math.max(2, Math.min(20, Number(process.env.ANTFARM_FRAME_HZ || 10)));
 const MAX_VIEWERS = Number(process.env.ANTFARM_MAX_VIEWERS || 200);
 const SAVE_SECONDS = Math.max(10, Number(process.env.ANTFARM_SAVE_SECONDS || 60));
+// Domains that should get the landing page instead of the farm, e.g.
+// "antfarm.lastweeksproject.com". Add the domain to this same deployment and
+// list it here; the farm stays on its own domain.
+const LANDING_HOSTS = (process.env.ANTFARM_LANDING_HOSTS || '')
+  .split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
 
 const ROOT = __dirname;
 const TYPES = {
@@ -250,7 +255,11 @@ const server = http.createServer(async (req, res) => {
   // ---- house farm: watching is open to anyone ----
   if (route === '/api/house/stream') return openStream(req, res);
   if (route === '/api/house/pheromones') return json(req, res, 200, house.pheromones());
-  if (route === '/api/house/status') return json(req, res, 200, house.status());
+  if (route === '/api/house/status') {
+    // Read-only and already public; the landing page on another domain shows it.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return json(req, res, 200, house.status());
+  }
   if (route === '/api/house/ant') {
     const d = house.ant(Number(url.searchParams.get('i')));
     return d ? json(req, res, 200, d) : json(req, res, 400, { error: 'No such ant.' });
@@ -268,6 +277,20 @@ const server = http.createServer(async (req, res) => {
     const s = house.status();
     return json(req, res, result.ok ? 200 : 400,
       Object.assign({}, result, { house: { autoTend: s.autoTend, speed: s.speed, paused: s.paused } }));
+  }
+
+  // ---- landing page ----
+  // On a landing domain, / is the landing page and anything else is sent to
+  // the same path on the farm's own domain... which is the path it asked for,
+  // just not here. It's also viewable at /landing on any domain, for checking
+  // it before the DNS is pointed.
+  const host = (req.headers.host || '').split(':')[0].toLowerCase();
+  if ((LANDING_HOSTS.includes(host) && route === '/') || route === '/landing' || route === '/landing/') {
+    return fs.readFile(path.join(ROOT, 'landing', 'index.html'), (err, buf) => {
+      if (err) { res.writeHead(404).end('not found'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end(buf);
+    });
   }
 
   // ---- static files ----

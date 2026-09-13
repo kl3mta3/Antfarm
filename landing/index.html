@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Antfarm — Last Week's Project</title>
+  <meta name="description" content="A real-time ant farm where every ant runs its own small, realistic brain — foraging, digging, raising brood, and eventually digging into the neighbours. Watch the house farm or run your own.">
+  <meta name="theme-color" content="#050913">
+  <meta property="og:title" content="Antfarm — Last Week's Project">
+  <meta property="og:description" content="Thousands of tiny decisions, zero supervision. A live ant farm you can watch, tend, or run yourself.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23111824'/><g fill='%2367dcff'><ellipse cx='11' cy='16' rx='5' ry='4'/><ellipse cx='17.5' cy='16' rx='2.6' ry='2'/><ellipse cx='23' cy='16' rx='3' ry='2.7'/></g><g stroke='%239d7dff' stroke-width='1.4' stroke-linecap='round'><path d='M17 14l-3-5M18 14l1-6M18 18l-3 5M18 18l1 6M17 14l5-4M17 18l5 4'/></g></svg>">
+  <style>
+    :root{
+      --bg:#050913;
+      --card:rgba(17,24,36,.78);
+      --card2:rgba(12,18,28,.92);
+      --line:rgba(255,255,255,.085);
+      --text:#f4f7fb;
+      --muted:#9cabbe;
+      --soft:#c8d2df;
+      --cyan:#67dcff;
+      --blue:#2c8cff;
+      --violet:#9d7dff;
+      --shadow:0 24px 80px rgba(0,0,0,.45);
+      --radius:24px;
+      --max:1180px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 14% 0%, rgba(58,170,255,.24), transparent 27rem),
+        radial-gradient(circle at 82% 18%, rgba(174,112,255,.20), transparent 31rem),
+        radial-gradient(circle at 60% 100%, rgba(81,121,255,.11), transparent 24rem),
+        linear-gradient(135deg, #07101b 0%, #0b1827 42%, #1d1334 100%);
+      font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height:1.6;
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+    #code-rain{
+      position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.38;mix-blend-mode:screen;
+    }
+    body::before{
+      content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:
+        linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px);
+      background-size:42px 42px;
+      mask-image:linear-gradient(to bottom, black 0%, transparent 72%);
+    }
+    .site{position:relative;z-index:1}
+    a{color:inherit;text-decoration:none}
+    .wrap{width:min(calc(100% - 40px),var(--max));margin:auto}
+    .nav{
+      position:sticky;top:0;z-index:30;backdrop-filter:blur(18px);
+      background:rgba(7,10,16,.72);border-bottom:1px solid var(--line);
+    }
+    .nav-inner{min-height:74px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.02em}
+    .mark{
+      width:38px;height:38px;border-radius:12px;display:grid;place-items:center;position:relative;
+      background:linear-gradient(145deg,rgba(104,224,255,.18),rgba(168,137,255,.18));
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:inset 0 0 18px rgba(104,224,255,.08),0 10px 28px rgba(0,0,0,.25);
+      overflow:hidden;
+    }
+    .mark:before{
+      content:"";width:15px;height:15px;border:2px solid var(--cyan);border-radius:5px;
+      transform:rotate(45deg);box-shadow:9px 9px 0 -5px var(--violet);
+    }
+    .brand small{
+      display:block;color:var(--muted);font-size:.67rem;font-weight:650;letter-spacing:.12em;
+      text-transform:uppercase;margin-top:-2px;
+    }
+    .brand .crumb{color:var(--muted);font-weight:600;margin:0 2px}
+    .nav-links{display:flex;align-items:center;gap:26px;color:var(--muted);font-size:.92rem}
+    .nav-links a:hover{color:var(--text)}
+    .nav-links .nav-cta{color:var(--cyan)}
+    .hero{
+      min-height:660px;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:56px;padding:92px 0 74px;
+    }
+    .eyebrow{
+      display:inline-flex;align-items:center;gap:9px;color:var(--cyan);
+      font-size:.78rem;font-weight:800;letter-spacing:.13em;text-transform:uppercase;margin-bottom:20px;
+    }
+    .eyebrow:before{content:"";width:26px;height:1px;background:currentColor}
+    h1{margin:0;font-size:clamp(3.1rem,6.2vw,6.1rem);line-height:.91;letter-spacing:-.068em;max-width:900px}
+    .hero-animated{
+      display:block;width:100%;min-height:1.02em;
+      font:inherit;font-size:1em;font-weight:inherit;line-height:inherit;letter-spacing:inherit;
+      background:linear-gradient(90deg, #b5baff 0%, var(--violet) 36%, var(--cyan) 75%, #86baff 100%);
+      -webkit-background-clip:text;background-clip:text;color:transparent;
+      filter:drop-shadow(0 0 14px rgba(120,140,255,.16));
+    }
+    .hero-animated::after{
+      content:"";display:inline-block;width:3px;height:.82em;margin-left:.05em;vertical-align:-.02em;border-radius:2px;
+      background:rgba(140,200,255,.9);box-shadow:0 0 10px rgba(120,180,255,.25);
+      animation:heroCaret .85s step-end infinite;
+    }
+    @keyframes heroCaret{50%{opacity:0}}
+    .lead{max-width:720px;margin:28px 0 0;color:var(--soft);font-size:clamp(1.06rem,1.7vw,1.3rem)}
+    .hero-actions{display:flex;gap:13px;flex-wrap:wrap;margin-top:32px}
+    .button{
+      display:inline-flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:12px;
+      padding:12px 17px;color:var(--text);background:rgba(255,255,255,.035);transition:.2s ease;font-weight:700;font-size:.92rem;
+    }
+    .button:hover{transform:translateY(-2px);border-color:rgba(104,224,255,.35);background:rgba(104,224,255,.07)}
+    .button.primary{background:linear-gradient(135deg,rgba(104,224,255,.17),rgba(168,137,255,.15));border-color:rgba(104,224,255,.25)}
+    .terminal{
+      background:linear-gradient(180deg,rgba(17,23,33,.92),rgba(10,14,21,.94));
+      border:1px solid rgba(255,255,255,.11);border-radius:var(--radius);box-shadow:var(--shadow);
+      overflow:hidden;transform:rotate(1.1deg);position:relative;
+    }
+    .terminal:after{
+      content:"";position:absolute;inset:auto -20% -50% 15%;height:230px;
+      background:radial-gradient(circle,rgba(104,224,255,.11),transparent 65%);pointer-events:none;
+    }
+    .terminal-bar{display:flex;align-items:center;gap:7px;padding:14px 16px;border-bottom:1px solid var(--line)}
+    .dot{width:10px;height:10px;border-radius:99px;background:#3a4350}
+    .terminal-title{margin-left:8px;color:#728094;font:600 .73rem ui-monospace,SFMono-Regular,Menlo,monospace}
+
+    /* The live window. Kept square to the page: a rotated canvas blurs the
+       farm's pixels. */
+    .terminal.live{transform:none}
+    .live-frame{position:relative;aspect-ratio:16/11;background:#0b0d12}
+    .live-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+    .live-status{
+      display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+      padding:12px 16px;border-top:1px solid var(--line);
+      color:#728094;font:600 .73rem ui-monospace,SFMono-Regular,Menlo,monospace;
+    }
+    .live-status a{color:var(--cyan)}
+    .live-dot{
+      display:inline-block;width:7px;height:7px;border-radius:99px;margin-right:8px;vertical-align:1px;
+      background:#75f1b8;box-shadow:0 0 10px rgba(117,241,184,.6);animation:livePulse 2s ease-in-out infinite;
+    }
+    .live-dot.off{background:#3a4350;box-shadow:none;animation:none}
+    @keyframes livePulse{50%{opacity:.35}}
+
+    .code-cyan{color:var(--cyan)}
+    .code-purple{color:#c0aaff}
+    .code-green{color:#75f1b8}
+    .code-gray{color:#7c899b}
+    section{padding:82px 0}
+    .section-head{display:grid;grid-template-columns:.85fr 1.15fr;gap:50px;align-items:end;margin-bottom:38px}
+    .kicker{color:var(--cyan);font:800 .76rem ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase}
+    h2{font-size:clamp(2.1rem,4.6vw,4rem);line-height:1.02;letter-spacing:-.045em;margin:9px 0 0}
+    .section-head p{margin:0;color:var(--muted);font-size:1.04rem;max-width:680px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+    .card{
+      min-height:250px;padding:25px;border-radius:var(--radius);border:1px solid var(--line);
+      background:linear-gradient(180deg,rgba(18,24,34,.72),rgba(10,14,21,.72));position:relative;overflow:hidden;transition:.22s ease;
+    }
+    .card:hover{transform:translateY(-4px);border-color:rgba(104,224,255,.21);background:linear-gradient(180deg,rgba(21,29,41,.82),rgba(10,15,23,.82))}
+    .card:before{
+      content:"";position:absolute;left:-35px;top:-45px;width:150px;height:150px;border-radius:50%;
+      background:radial-gradient(circle,rgba(104,224,255,.09),transparent 66%);
+    }
+    .icon{
+      width:42px;height:42px;border-radius:12px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.09);
+      background:rgba(255,255,255,.035);color:var(--cyan);font:800 .75rem ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:32px;
+    }
+    .card h3{margin:0 0 9px;font-size:1.17rem;letter-spacing:-.02em}
+    .card p{margin:0;color:var(--muted);font-size:.93rem}
+    .featured{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+    .project{
+      min-height:285px;padding:28px;border:1px solid var(--line);border-radius:var(--radius);
+      background:linear-gradient(145deg,rgba(17,23,33,.84),rgba(10,14,20,.72));
+      display:flex;flex-direction:column;justify-content:space-between;transition:.22s ease;position:relative;overflow:hidden;cursor:pointer;
+    }
+    .project:hover{transform:translateY(-4px);border-color:rgba(168,137,255,.26);box-shadow:0 12px 34px rgba(0,0,0,.24)}
+    .project:after{
+      content:"";position:absolute;width:260px;height:260px;border-radius:50%;right:-110px;bottom:-145px;
+      background:radial-gradient(circle,rgba(168,137,255,.12),transparent 66%);pointer-events:none;
+    }
+    .project-top{display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .pill{
+      font:800 .7rem ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;letter-spacing:.12em;
+      color:var(--cyan);border:1px solid rgba(104,224,255,.18);background:rgba(104,224,255,.055);padding:7px 9px;border-radius:999px;
+    }
+    .project h3{font-size:1.65rem;margin:28px 0 8px;letter-spacing:-.035em}
+    .project p{max-width:570px;margin:0;color:var(--muted)}
+    .tech{display:flex;gap:8px;flex-wrap:wrap;margin-top:25px}
+    .tech span{color:#8794a5;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.055);padding:5px 8px;border-radius:8px;font-size:.72rem}
+    .linkline{margin-top:18px;color:#d4def3;font-weight:700;font-size:.92rem}
+    .linkline span{color:var(--cyan)}
+    .manifesto{
+      padding:46px;border:1px solid var(--line);
+      background:radial-gradient(circle at 88% 0%,rgba(168,137,255,.12),transparent 25rem),radial-gradient(circle at 0% 100%,rgba(104,224,255,.09),transparent 28rem),rgba(13,18,27,.76);
+      border-radius:28px;box-shadow:var(--shadow);
+    }
+    .manifesto-grid{display:grid;grid-template-columns:.78fr 1.22fr;gap:56px;align-items:start}
+    .rules{display:grid;gap:0}
+    .rule{display:grid;grid-template-columns:44px 1fr;gap:16px;padding:17px 0;border-bottom:1px solid var(--line)}
+    .rule:last-child{border-bottom:0}
+    .rule-num{color:var(--cyan);font:700 .78rem ui-monospace,SFMono-Regular,Menlo,monospace;padding-top:3px}
+    .rule strong{display:block;font-size:1.03rem;margin-bottom:2px}
+    .rule span{color:var(--muted);font-size:.91rem}
+    .quote{margin-top:17px;font-size:clamp(1.45rem,3vw,2.5rem);line-height:1.2;letter-spacing:-.035em;color:#e9eef7}
+    footer{padding:38px 0 48px;color:#7f8b9c;font-size:.84rem}
+    .footer-inner{border-top:1px solid var(--line);padding-top:25px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+    .footer-inner a:hover{color:var(--text)}
+    .tiny-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#667385}
+    .reveal{opacity:0;transform:translateY(18px);transition:.55s ease}
+    .reveal.visible{opacity:1;transform:none}
+    @media(max-width:900px){
+      .nav-links{display:none}
+      .hero{grid-template-columns:1fr;gap:40px;padding-top:70px}
+      .terminal{transform:none}
+      .section-head,.manifesto-grid{grid-template-columns:1fr;gap:24px}
+      .grid,.featured{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:620px){
+      .wrap{width:min(calc(100% - 26px),var(--max))}
+      .hero{min-height:auto;padding:58px 0 48px}
+      h1{font-size:clamp(3rem,16vw,4.6rem)}
+      .grid,.featured{grid-template-columns:1fr}
+      .card,.project{min-height:auto}
+      .manifesto{padding:26px}
+      section{padding:62px 0}
+      .hero-animated{display:block;width:100%;min-height:1.9em;white-space:normal}
+      .brand .crumb, .brand .crumb + span{display:none}
+    }
+  </style>
+</head>
+<body id="top">
+  <canvas id="code-rain" aria-hidden="true"></canvas>
+
+  <div class="site">
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="https://lastweeksproject.com" aria-label="Last Week's Project home">
+          <span class="mark" aria-hidden="true"></span>
+          <span>Last Week's Project<small>build · break · fix · ship</small></span>
+        </a>
+        <nav class="nav-links">
+          <a href="#how">How it works</a>
+          <a href="#farms">Two farms</a>
+          <a href="#tending">Tending</a>
+          <a class="nav-cta" data-app-link="/" href="https://antfarm-app.lastweeksproject.com/">Watch live ↗</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap hero">
+        <div>
+          <div class="eyebrow">Antfarm · a simulation</div>
+          <h1>Thousands of tiny<br>decisions,<span class="hero-animated" data-text="zero supervision.">zero supervision.</span></h1>
+          <p class="lead">
+            A real-time ant farm where every ant runs its own small, realistic brain. They forage, dig,
+            raise brood, carry out their dead, and when two colonies finally run out of room, they dig
+            straight into each other’s nests.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" data-app-link="/" href="https://antfarm-app.lastweeksproject.com/">Watch the house farm ↗</a>
+            <a class="button" data-app-link="/play" href="https://antfarm-app.lastweeksproject.com/play">Run your own ↗</a>
+          </div>
+        </div>
+
+        <div class="terminal live reveal visible">
+          <div class="terminal-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="terminal-title">house-farm — live</span>
+          </div>
+          <div class="live-frame">
+            <iframe id="live" title="The house farm, live" loading="lazy"
+                    data-app-link="/?embed=1" src="https://antfarm-app.lastweeksproject.com/?embed=1"></iframe>
+          </div>
+          <div class="live-status">
+            <span><span class="live-dot off" id="liveDot"></span><span id="liveText">connecting…</span></span>
+            <a data-app-link="/" href="https://antfarm-app.lastweeksproject.com/">open full view ↗</a>
+          </div>
+        </div>
+      </div>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <div>
+              <div class="kicker">How it works</div>
+              <h2>Every ant is its own little program.</h2>
+            </div>
+            <p>
+              There is no colony-level script telling anyone what to do. Each ant has a job, a body that gets
+              hungry and thirsty, and a handful of simple rules. The nest, the trails, and the wars are what
+              falls out of all of them running at once.
+            </p>
+          </div>
+
+          <div class="grid">
+            <article class="card reveal"><div class="icon">01</div><h3>One brain per ant</h3><p>Every ant has a goal, a current thought, health, energy and a work history. Click any of them to follow it around and see why it’s doing what it’s doing.</p></article>
+            <article class="card reveal"><div class="icon">02</div><h3>Castes that change jobs</h3><p>Foragers, diggers, nurses, soldiers and undertakers. When the colony is short on something, workers quietly switch jobs, which is how a nest that loses its last nurse survives.</p></article>
+            <article class="card reveal"><div class="icon">03</div><h3>A queen with a strategy</h3><p>She can’t see the farm. She knows how full the larder is, how much room is left, and whether strangers are about, then commits to growing, expanding, defending or raiding, with a bit of randomness.</p></article>
+            <article class="card reveal"><div class="icon">04</div><h3>Nests dug for real</h3><p>Chambers are planned and excavated tile by tile. The soil gets carried out to a mound that slumps and erodes, and new entrances get bored down into the nest as the population grows.</p></article>
+            <article class="card reveal"><div class="icon">05</div><h3>Neighbours, eventually</h3><p>Colonies avoid each other first. Under pressure they raid larders, steal stores, drive tunnels into each other’s chambers, and take over nests whose queen is gone.</p></article>
+            <article class="card reveal"><div class="icon">06</div><h3>Nothing goes to waste</h3><p>Undertakers carry the dead out of the nest. Bodies go back into a shared biomass pool, and every ant is a recycled slot that remembers how many lives it has had.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="farms">
+        <div class="wrap">
+          <div class="section-head reveal">
+            <div>
+              <div class="kicker">Two farms</div>
+              <h2>Watch the shared one. Wreck your own.</h2>
+            </div>
+            <p>
+              The same simulation runs in two places: once on the server, where everyone watches the same colony
+              around the clock, and once entirely in your browser, where the ants are yours to look after, or not.
+            </p>
+          </div>
+
+          <div class="featured">
+            <a class="project reveal" data-app-link="/" href="https://antfarm-app.lastweeksproject.com/">
+              <div>
+                <div class="project-top"><span class="pill">Shared</span><span class="tiny-code">LIVE</span></div>
+                <h3>The house farm</h3>
+                <p>One colony, running on the server all day and all night. Everyone who opens it sees the same ants,
+                  the same tunnels and the same slow-motion disasters. Tending it takes a keeper sign-in.</p>
+              </div>
+              <div>
+                <div class="tech"><span>Real time</span><span>Server-side</span><span>Live stream</span><span>Shared</span></div>
+                <div class="linkline">Watch it <span>↗</span></div>
+              </div>
+            </a>
+            <a class="project reveal" data-app-link="/play" href="https://antfarm-app.lastweeksproject.com/play">
+              <div>
+                <div class="project-top"><span class="pill">Yours</span><span class="tiny-code">LOCAL</span></div>
+                <h3>Run your own</h3>
+                <p>The whole farm, running in your browser. Drop food and water, start with up to three queens, add more
+                  later, speed it up, or start over. No account, and it’s saved right there in your browser.</p>
+              </div>
+              <div>
+                <div class="tech"><span>In-browser</span><span>No sign-in</span><span>Local save</span><span>Up to 6 nests</span></div>
+                <div class="linkline">Start a farm <span>↗</span></div>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="tending">
+        <div class="wrap manifesto reveal">
+          <div class="manifesto-grid">
+            <div>
+              <div class="kicker">Tending</div>
+              <h2>The keeper’s rules.</h2>
+              <p class="quote">It’s an ant farm. You still have to feed it.</p>
+            </div>
+
+            <div class="rules">
+              <div class="rule"><div class="rule-num">01</div><div><strong>Drop food and water.</strong><span>Or switch on auto-tend and let it scatter rations near each nest. Thirst kills faster than hunger.</span></div></div>
+              <div class="rule"><div class="rule-num">02</div><div><strong>Real time means real time.</strong><span>At 1× a colony day takes about nine minutes. 3× and 10× exist for the impatient.</span></div></div>
+              <div class="rule"><div class="rule-num">03</div><div><strong>Read the trails.</strong><span>Turn on pheromones to see each colony’s paths in its own colour, and where two of them overlap.</span></div></div>
+              <div class="rule"><div class="rule-num">04</div><div><strong>Follow an ant.</strong><span>Its goal, its thoughts, what it’s carrying, how far it has walked and how much longer it has.</span></div></div>
+              <div class="rule"><div class="rule-num">05</div><div><strong>Expect war.</strong><span>Put two queens on one stretch of soil and give them time. It’s probably not your fault.</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap footer-inner">
+        <span>© <span id="year">2026</span> <a href="https://lastweeksproject.com">Last Week’s Project</a></span>
+        <span class="tiny-code">forage → dig → raise → raid → repeat</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    // Where the farm lives. On antfarm.lastweeksproject.com that's the app's own
+    // domain; anywhere else (a local preview, or the app domain's /landing) it's
+    // the same server this page came from.
+    const APP = /^antfarm\./.test(location.hostname)
+      ? "https://antfarm-app.lastweeksproject.com"
+      : location.origin;
+    document.querySelectorAll("[data-app-link]").forEach(el => {
+      const url = APP + el.dataset.appLink;
+      if (el.tagName === "IFRAME") el.src = url; else el.href = url;
+    });
+
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach(el => observer.observe(el));
+
+    (function(){
+      const heroText = document.querySelector(".hero-animated");
+      if (!heroText) return;
+      const phrase = heroText.dataset.text || "zero supervision.";
+      let i = 0;
+      heroText.textContent = "";
+      function typeHero(){
+        if (i < phrase.length) {
+          heroText.textContent += phrase[i++];
+          setTimeout(typeHero, 95);
+        }
+      }
+      setTimeout(typeHero, 450);
+    })();
+
+    // The live line under the window: how the house farm is doing right now.
+    (function(){
+      const dot = document.getElementById("liveDot");
+      const text = document.getElementById("liveText");
+      const TICKS_PER_DAY = 10800;
+      async function refresh(){
+        try {
+          const s = await (await fetch(APP + "/api/house/status", { cache: "no-store" })).json();
+          const day = Math.floor(s.tick / TICKS_PER_DAY) + 1;
+          text.textContent = s.ants.toLocaleString() + " ants · " + s.nests + (s.nests === 1 ? " nest" : " nests") +
+            " · day " + day + (s.paused ? " · paused" : "");
+          dot.classList.remove("off");
+        } catch (e) {
+          text.textContent = "the farm isn't answering right now";
+          dot.classList.add("off");
+        }
+      }
+      refresh();
+      setInterval(refresh, 5000);
+    })();
+
+    (function(){
+      const canvas = document.getElementById("code-rain");
+      const ctx = canvas.getContext("2d");
+      function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+      resize();
+      window.addEventListener("resize", resize);
+
+      const snippets = [
+        "forage()", "dig(tile)", "lay(egg)", "trail++", "carry(food)", "queen.decide()",
+        "brood.feed()", "if(thirsty)", "raid?", "return home", "pheromone", "tunnel.bore()",
+        "spoil.dump()", "retask()", "alarm!", "undertake()", "nest.expand()", "stranger?",
+        "store += 8", "grow | defend"
+      ];
+
+      const drops = Array.from({length: 38}, () => ({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        speed: 0.26 + Math.random() * 0.54,
+        len: 1 + Math.floor(Math.random() * 4),
+        alpha: 0.14 + Math.random() * 0.18,
+        drift: -0.10 + Math.random() * 0.20,
+        text: snippets[Math.floor(Math.random() * snippets.length)],
+        size: 11 + Math.random() * 5
+      }));
+
+      function draw(){
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const d of drops) {
+          ctx.save();
+          ctx.globalAlpha = d.alpha;
+          const grad = ctx.createLinearGradient(d.x, d.y, d.x, d.y + 120);
+          grad.addColorStop(0, "rgba(190,228,255,.92)");
+          grad.addColorStop(.35, "rgba(125,183,255,.68)");
+          grad.addColorStop(.75, "rgba(149,111,255,.42)");
+          grad.addColorStop(1, "rgba(123,70,255,0)");
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y);
+          ctx.lineTo(d.x + d.drift * 28, d.y + 62 + d.len * 24);
+          ctx.stroke();
+          ctx.fillStyle = "rgba(203,223,255,.96)";
+          ctx.font = `${d.size}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+          ctx.fillText(d.text, d.x - 10, d.y - 8);
+          ctx.restore();
+
+          d.y += d.speed;
+          d.x += d.drift * 0.16;
+          if (d.y > canvas.height + 160) {
+            d.y = -30 - Math.random() * 160;
+            d.x = Math.random() * canvas.width;
+            d.text = snippets[Math.floor(Math.random() * snippets.length)];
+            d.alpha = 0.14 + Math.random() * 0.18;
+            d.speed = 0.26 + Math.random() * 0.54;
+            d.size = 11 + Math.random() * 5;
+          }
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+  </script>
+</body>
+</html>

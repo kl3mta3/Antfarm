@@ -141,4 +141,8 @@
     #toolbar button { padding: 4px 7px; font-size: 11px; }
     .tblabel { display: none; }
   }
+
+  /* ?embed=1: just the farm, framed inside another page */
+  .embed #toolbar, .embed #side, .embed #flash { display: none !important; }
+  .embed #app { flex-direction: row; }
   

@@ -5,6 +5,7 @@ FROM node:20-alpine
 WORKDIR /app
 COPY index.html style.css server.js house.js ./
 COPY src ./src
+COPY landing ./landing
 
 # The house farm is saved here. Mount a volume so it survives the container.
 RUN mkdir -p /data && chown node:node /data

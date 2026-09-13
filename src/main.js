@@ -14,6 +14,10 @@
   // server; at /play the whole farm runs here in the browser, yours alone.
   const HOUSE = AF.MODE === 'house';
 
+  // ?embed=1 — just the farm, no toolbar or panels, for showing it inside
+  // another page (the landing page's live window).
+  if (new URLSearchParams(location.search).has('embed')) document.body.classList.add('embed');
+
   let tool = 'select';
   let autoTend = false;
   try { autoTend = localStorage.getItem('antfarm.autotend') === '1'; } catch (e) { /* fine */ }

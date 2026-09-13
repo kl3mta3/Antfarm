@@ -434,6 +434,23 @@ Put it behind a reverse proxy with HTTPS before sharing the address. Sign-in
 sends the password to the server, and without HTTPS anyone on the network path
 could read it.
 
+## The landing page
+
+`landing/index.html` is a page about the project, styled to match
+lastweeksproject.com, with the house farm running live in its window
+(`/?embed=1` shows just the farm, no toolbar or panels).
+
+It's served by the same deployment. Add the landing domain to the app, and tell
+the server which domain it is:
+
+```
+ANTFARM_LANDING_HOSTS=antfarm.lastweeksproject.com
+```
+
+On that domain, `/` is the landing page; the farm stays on its own domain. To
+look at the landing page before pointing any DNS, open `/landing` on any domain
+the server answers to.
+
 Only a couple of dig faces are ever open at once. Queue rooms faster than the
 diggers can cut them and they thrash between sites, leaving every face
 half-finished — the nest grows faster by working on less at a time.
