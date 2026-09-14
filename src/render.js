@@ -221,9 +221,12 @@
     ctx.lineWidth = 0.25;
     for (const nest of AF.nests.list) {
       for (const n of nest.plan) {
+        // Rooms the colony gave up on aren't part of the plan any more. Drawn
+        // as grey rings they buried the real plan: one nest showed dozens
+        // stacked on the same few spots. Any digging they got shows in the soil.
+        if (n.abandoned) continue;
         const prog = W.nodeProgress(n);
-        ctx.strokeStyle = n.abandoned ? 'rgba(120,120,130,0.35)'
-          : n.built >= 1 ? 'rgba(90,200,140,0.5)' : 'rgba(240,200,90,0.55)';
+        ctx.strokeStyle = n.built >= 1 ? 'rgba(90,200,140,0.5)' : 'rgba(240,200,90,0.55)';
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
         ctx.stroke();

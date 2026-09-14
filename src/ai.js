@@ -1028,13 +1028,37 @@
   // toward the goal is genuinely blocked.
   const PROBES = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05];
   const SKIRT = [1.4, -1.4, 1.75, -1.75, 2.1, -2.1, 2.6, -2.6];
+  // How close each digger has got to where it is headed. The probes walk any
+  // open way pointing roughly at the goal, and along a chamber wall there
+  // nearly always is one: five diggers slid up and down the same wall for
+  // hours and never cut a tile toward a room buried 13 tiles away. Once the
+  // goal stops getting closer, the digger cuts straight at it instead.
+  const DIG_STALL = 120;
+  const digBest = new Float32Array(C.MAX_ANTS);
+  const digGoal = new Float32Array(C.MAX_ANTS * 2).fill(-1);
+  const digStall = new Int32Array(C.MAX_ANTS);
   function digToward(i, gx, gy) {
     const nest = nestOf(i);
     let want = Math.atan2(gy - A.y[i], gx - A.x[i]);
 
+    const dGoal = Math.hypot(gx - A.x[i], gy - A.y[i]);
+    if (Math.abs(digGoal[i * 2] - gx) + Math.abs(digGoal[i * 2 + 1] - gy) > 1.5) {
+      digGoal[i * 2] = gx; digGoal[i * 2 + 1] = gy;
+      digBest[i] = dGoal; digStall[i] = 0;
+    } else if (dGoal < digBest[i] - 0.25) {
+      digBest[i] = dGoal; digStall[i] = 0;
+    } else {
+      digStall[i]++;
+    }
+    const cutStraight = digStall[i] >= DIG_STALL;
+    const goal = want;
+
     // Lean toward buried food if any is close enough to smell. Kept slight on
     // purpose: let it pull hard and colonies beeline for caches and stop
-    // building nests, which is a worse thing to watch.
+    // building nests, which is a worse thing to watch. It only steers which way
+    // new soil is cut. Walking open tunnel it used to steer too, and standing
+    // right at a peak of the smell, where "uphill" points a different way at
+    // every step, diggers walked tiny circles on the spot for hours.
     const scent = W.sampleCache(A.x[i], A.y[i]);
     if (scent > 0.05) {
       const toward = W.cacheUphill(A.x[i], A.y[i]);
@@ -1042,8 +1066,11 @@
         want += wrapAngle(toward - want) * C.CACHE_SCENT_BIAS * Math.min(1, scent * 2);
       }
     }
-    for (let k = 0; k < PROBES.length; k++) {
-      const a = want + PROBES[k];
+    // Open ground is walked toward the goal itself. Stalled: only the way
+    // straight ahead counts; if that is soil, it is cut.
+    const probes = cutStraight ? 1 : PROBES.length;
+    for (let k = 0; k < probes; k++) {
+      const a = goal + PROBES[k];
       const nx = A.x[i] + Math.cos(a) * 1.2, ny = A.y[i] + Math.sin(a) * 1.2;
       if (W.passableAt(nx, ny)) {
         steer(i, a, 0.4);
@@ -1157,7 +1184,10 @@
         if (b < 0 || !B.alive[b]) { A.target[i] = -1; setState(i, ST.TEND); break; }
         if (A.carry[i] === CARRY.EGG) {
           B.x[b] = A.x[i]; B.y[b] = A.y[i];
-          const inside = dist2(A.x[i], A.y[i], bc.x, bc.y) < bc.r * bc.r;
+          // In the nursery by distance, or by its route map: the map counts
+          // every open tile of the room, and a nurse just past the radius but
+          // already "there" on the map had nowhere left to walk and circled.
+          const inside = dist2(A.x[i], A.y[i], bc.x, bc.y) < bc.r * bc.r || atField(i, nest.fBrood, 0);
           const gx = A.memx[i], gy = A.memy[i];
           if (inside && (gx < 0 || dist2(A.x[i], A.y[i], gx, gy) < 0.35)) {
             B.held[b] = -1;
@@ -1704,6 +1734,30 @@
     }
   }
 
+  // Where each ant last got somewhere. Distance walked alone can't tell pacing
+  // from progress: an ant going round and round in the same few tiles walks
+  // plenty, and a digger did that for hours without the watchdog noticing.
+  // An ant with an errand that stays within a few tiles of one spot for
+  // PACING_TICKS is treated as stuck.
+  const PACING_TICKS = 600;
+  const lastReplan = new Int32Array(C.MAX_ANTS).fill(-1000);
+  const paceX = new Float32Array(C.MAX_ANTS), paceY = new Float32Array(C.MAX_ANTS);
+  const paceT = new Int32Array(C.MAX_ANTS).fill(-1), paceS = new Int16Array(C.MAX_ANTS).fill(-1);
+  // Jobs that are meant to mill about in one area.
+  const WANDERING = new Set([ST.IDLE, ST.TEND, ST.PATROL, ST.REST, ST.RESPOND, ST.FIGHT, ST.AVOID,
+    ST.SEEK_FOOD, ST.SEEK_WATER, ST.SEEK_BODY]);
+
+  function pacing(i) {
+    const moved = Math.hypot(A.x[i] - paceX[i], A.y[i] - paceY[i]);
+    if (paceT[i] < 0 || moved > 3 || A.state[i] !== paceS[i]) {
+      paceX[i] = A.x[i]; paceY[i] = A.y[i]; paceT[i] = col.tick; paceS[i] = A.state[i];
+      return false;
+    }
+    if (col.tick - paceT[i] < PACING_TICKS) return false;
+    paceT[i] = col.tick;
+    return A.caste[i] !== CASTE.QUEEN && !WANDERING.has(A.state[i]) && !stationary(A.state[i]);
+  }
+
   // States where standing still is the job, not a fault.
   function stationary(s) {
     return s === ST.EATING || s === ST.DRINKING || s === ST.DIGGING ||
@@ -1735,10 +1789,24 @@
       const expected = Math.min(0.8, A.spd[i] * C.WALK_PACE * 60 * 0.5);
       if (travelled < expected && !stationary(A.state[i]) && !loitering) A.stuck[i] += 60;
       else A.stuck[i] = 0;
+      if (pacing(i)) {
+        // Re-plan now. Brood being carried is set down where it is, so a
+        // nurse that gives up doesn't walk off holding it forever.
+        if (A.carry[i] === CARRY.EGG && A.target[i] >= 0) {
+          B.held[A.target[i]] = -1;
+          A.carry[i] = CARRY.NONE;
+          A.target[i] = -1;
+        }
+        A.stuck[i] = 180;
+      }
     }
 
     if (A.stuck[i] > 420) { digOut(i, nest); return; }
-    if (A.stuck[i] >= 180 && A.stuck[i] % 180 === 0) {
+    // Once per stuck spell, not every tick: the count only moves at each
+    // minute's check, so it sat on 180 and the ant re-planned sixty times over,
+    // flipping between two dig sites each tick.
+    if (A.stuck[i] >= 180 && A.stuck[i] % 180 === 0 && col.tick - lastReplan[i] >= 60) {
+      lastReplan[i] = col.tick;
       const n = A.node[i] >= 0 ? nest.plan[A.node[i]] : null;
       if (n && Math.hypot(n.x - A.x[i], n.y - A.y[i]) > n.r + 2) n.fails++;
       releaseNode(i, nest);

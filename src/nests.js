@@ -448,6 +448,7 @@
         nest.stats.breaches++;
       }
     }
+    tidyPlan(nest);
 
     // Only ever keep a couple of faces open at once. Queueing rooms faster than
     // the diggers can cut them makes them thrash between sites.
@@ -540,6 +541,22 @@
     const wanted = 8 + Math.floor(nest.count / 8);
     if (active >= wanted) return;
 
+    // A room given up part-dug is a real hole in the ground. Before planning a
+    // new one, pick one of those up again. Planned afresh instead, new rooms
+    // landed on top of the old holes and were given up in turn.
+    const halfDug = nest.plan.find(n => n.abandoned && (n.revived || 0) < 2 &&
+      (n.type === 'nursery' || n.type === 'store' || n.type === 'waste' || n.type === 'chamber') &&
+      W.nodeProgress(n) > 0);
+    if (halfDug) {
+      halfDug.abandoned = false;
+      halfDug.built = 0;
+      halfDug.fails = 0;
+      halfDug.idleTicks = 0;
+      halfDug.lastProgress = W.nodeProgress(halfDug);
+      halfDug.revived = (halfDug.revived || 0) + 1;
+      return;
+    }
+
     const built = nest.plan.filter(n => n.built >= 1 && !n.abandoned);
     let anchor;
     if (!built.length) {
@@ -582,6 +599,8 @@
         if (clash) break;
       }
       if (clash) continue;
+      if (nest.failedSpots && nest.failedSpots.some(s =>
+        s.until > AF.colony.tick && Math.hypot(s.x - nx, s.y - ny) < s.r + r)) continue;
 
       const scent = W.sampleCache(nx, ny) + Math.random() * 0.08;
       if (scent > bestScent) { bestScent = scent; bestSpot = { x: nx, y: ny }; }
@@ -599,6 +618,42 @@
       nest.boxedIn = (nest.boxedIn || 0) + 1;
     }
   };
+
+  // Rooms given up before a single tile was cut are only a marker. Kept, they
+  // piled up: one nest carried 285 of them, mostly re-planned on the same few
+  // spots, and the plan became unreadable. They are dropped, and their spot is
+  // left alone for a while so the next room goes somewhere else. Part-dug
+  // rooms are real holes and stay. Ants hold plan positions by index, so
+  // those are renumbered to match.
+  const FAILED_SPOT_TICKS = 36000;
+  function tidyPlan(nest) {
+    const keep = new Set([nest.storeNode, nest.broodNode, nest.queenNode, nest._store, nest._brood, nest._queen]);
+    const A = AF.colony.A, N = AF.CFG.MAX_ANTS;
+    const claimed = new Set();
+    for (let i = 0; i < N; i++) if (A.alive[i] && A.nest[i] === nest.id && A.node[i] >= 0) claimed.add(A.node[i]);
+
+    const remap = new Int32Array(nest.plan.length).fill(-1);
+    const next = [];
+    const now = AF.colony.tick;
+    nest.failedSpots = (nest.failedSpots || []).filter(s => s.until > now);
+    nest.plan.forEach((n, k) => {
+      const dead = n.abandoned && !keep.has(n) && !claimed.has(k) &&
+        !(n.bored > 0) && W.nodeProgress(n) <= 0;
+      if (dead) {
+        if (nest.failedSpots.length < 60) nest.failedSpots.push({ x: n.x, y: n.y, r: n.r, until: now + FAILED_SPOT_TICKS });
+        return;
+      }
+      remap[k] = next.length;
+      next.push(n);
+    });
+    if (next.length === nest.plan.length) return;
+    for (let i = 0; i < N; i++) {
+      if (A.alive[i] && A.nest[i] === nest.id && A.node[i] >= 0) {
+        A.node[i] = A.node[i] < remap.length ? remap[A.node[i]] : -1;
+      }
+    }
+    nest.plan = next;
+  }
 
   // ----------------------------------------------------------------- fields
 
