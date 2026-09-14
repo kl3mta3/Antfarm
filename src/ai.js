@@ -43,14 +43,20 @@
 
   // ------------------------------------------------------------- math helpers
 
+  // Constant time however large the angle. This used to step a full turn at a
+  // time, and headings that were never wrapped grew into the millions over
+  // days of running, so every steer spun that loop millions of times: it came
+  // to most of a tick's cost on a long-lived farm.
   function wrapAngle(a) {
-    while (a > Math.PI) a -= TAU;
-    while (a < -Math.PI) a += TAU;
+    if (a > Math.PI || a < -Math.PI) {
+      a = ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+      if (!Number.isFinite(a)) a = 0;
+    }
     return a;
   }
   function steer(i, desired, rate) {
     const d = wrapAngle(desired - A.hd[i]);
-    A.hd[i] += Math.max(-rate, Math.min(rate, d));
+    A.hd[i] = wrapAngle(A.hd[i] + Math.max(-rate, Math.min(rate, d)));
   }
   function dist2(ax, ay, bx, by) {
     const dx = ax - bx, dy = ay - by;
@@ -2148,11 +2154,17 @@
     for (const nest of NS.list) nest.policy.threat *= C.THREAT_DECAY;
 
     for (let i = 0; i < C.MAX_ANTS; i++) {
-      if (A.alive[i]) stepAnt(i);
+      if (!A.alive[i]) continue;
+      // Headings get nudged all over the place; keep them in one turn so they
+      // can't grow without limit (see wrapAngle).
+      const h = A.hd[i];
+      if (h > Math.PI || h < -Math.PI) A.hd[i] = wrapAngle(h);
+      stepAnt(i);
     }
 
     stepBrood();
     stepIntruders();
+    for (const t of col.intruders) t.hd = wrapAngle(t.hd || 0);
     updateResources();
     col.rotCorpses();
 
