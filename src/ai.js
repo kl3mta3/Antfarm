@@ -2240,6 +2240,7 @@
     if (col.tick % 240 === 0) for (const n of NS.list) if (n.alive) rebalanceLabour(n);
     if (col.tick % REVIEW_EVERY === 0) for (const n of NS.list) if (n.alive) reviewDigSites(n);
     if (lifeEvery(C.ERODE_EVERY)) W.erode(C.ERODE_SAMPLES);        // weather keeps colony time
+    W.relaxSpoil(4);                                              // loose soil slides in real time
     if (col.tick % C.FIELD_REBUILD_EVERY === 0 && W.fieldsStale) NS.rebuildFields();
     if (col.tick % 600 === 0) for (const n of NS.list) if (n.alive) NS.expandPlan(n);
     if (col.tick % 200 === 0) for (const n of NS.list) if (n.alive) NS.checkEntrances(n);

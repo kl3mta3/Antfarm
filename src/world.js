@@ -378,7 +378,7 @@
   // enough to hold it. Classic sandpile relaxation — the mound shape and its
   // maximum height for a given base both fall out of this one rule.
   function settle(x) {
-    let cx = x;
+    let cx = x, moved = false;
     for (let step = 0; step < 80; step++) {
       const top = surfY[cx];
       if (top < 1 || tiles[idx(cx, top)] !== T.MOUND) break;   // only spoil slides
@@ -391,16 +391,67 @@
       if (lDrop === rDrop) target = Math.random() < 0.5 ? cx - 1 : cx + 1;
       else target = lDrop > rDrop ? cx - 1 : cx + 1;
 
-      const dropY = surfY[target] - 1;
-      if (!canRest(target, dropY)) break;
+      let dropY = surfY[target] - 1;
+      if (!canRest(target, dropY)) {
+        // Nothing to rest on because the column is an open hole: a shaft
+        // somebody started and gave up on. The grain drops into its mouth and
+        // plugs it, and the next one rests on top. Without this, a dead shaft
+        // beside a heap was a moat nothing could cross, and the heap's face
+        // stood sheer against it for good.
+        if (!deadHole(target)) break;
+        dropY = surfY[target];
+      }
 
       tiles[idx(cx, top)] = T.AIR;
       surfY[cx] = top + 1;
       tiles[idx(target, dropY)] = T.MOUND;
       surfY[target] = dropY;
       cx = target;
+      moved = true;
     }
+    return moved;
   }
+
+  // An open hole at the ground line that no colony is using: not one of any
+  // nest's entrances, and not a shaft still being cut.
+  function deadHole(x) {
+    const y = surfY[x];
+    if (y < C.SPOIL_CEILING || y >= H - 1) return false;
+    if (tiles[idx(x, y)] !== T.AIR || tiles[idx(x, y - 1)] !== T.AIR) return false;
+    const nests = AF.nests;
+    if (!nests) return false;
+    if (nests.shaftGuarded(x)) return false;
+    for (const nest of nests.list) {
+      if (!nest.alive) continue;
+      for (const e of nest.entrances) if (Math.abs(e.x - (x + 0.5)) <= 1.5) return false;
+    }
+    return true;
+  }
+
+  // Avalanches on their own. settle() only ever moves a grain that has just
+  // been dropped, so a face with nothing landing on it stayed exactly as steep
+  // as it was left. While an entrance is being cut no spoil may land beside it,
+  // and the heap banked up against that invisible wall; when the entrance was
+  // given up the wall stayed, 25 tiles of loose soil standing sheer, since
+  // weathering reaches each column only about once a day. This walks the
+  // ground a few columns every tick and lets anything steeper than the soil
+  // can hold slide, so a face like that slumps into a slope over minutes.
+  let relaxCursor = 3;
+  world.relaxSpoil = function (columns) {
+    let changed = false;
+    for (let k = 0; k < columns; k++) {
+      relaxCursor = relaxCursor >= W - 4 ? 3 : relaxCursor + 1;
+      const x = relaxCursor;
+      for (let rep = 0; rep < 4; rep++) {
+        const top = surfY[x];
+        if (top < 1 || tiles[idx(x, top)] !== T.MOUND) break;
+        if (surfY[x - 1] - top <= C.SPOIL_STEP && surfY[x + 1] - top <= C.SPOIL_STEP) break;
+        if (!settle(x)) break;
+        changed = true;
+      }
+    }
+    if (changed) { world.dirty = true; world.fieldsStale = true; }
+  };
 
   // How thick the spoil lies over the original ground at this column.
   world.spoilDepth = function (fx) {
