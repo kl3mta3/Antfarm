@@ -232,14 +232,26 @@ food in it (a hungry one stops growing), and whether a nurse is carrying it.
 On your own farm, a pupa you are watching hands over to the new adult when it
 comes out.
 
-## Turning ground to dirt
+## Edit mode
 
-Keepers get a **Turn to dirt** tool (`D`). Click or drag over bare rock or open
-ground and it becomes ordinary soil, for filling in a tunnel, closing off a
-failed shaft, or opening up rock the ants can't cut. It never changes a tile
-with an ant, brood, a body or an intruder on it, food or water lying there, or
-the mouth of an entrance, and it won't put soil in mid-air. On the house farm
-the server checks the keeper's sign-in and applies the same rules.
+Keepers get an **Edit** button (`E`). It opens a second row with everything
+that reshapes the farm, in one place:
+
+| | |
+|---|---|
+| **Dirt** (`D`) | rock or open ground becomes ordinary soil — fill a tunnel, close a failed shaft |
+| **Dig** (`X`) | soil or stone is dug out, leaving open space |
+| **Stone** (`R`) | soil or open ground becomes rock the ants can't cut — wall a nest in, or off |
+| **Add queen** | found a new nest where you click on the surface |
+| **New colony** | start the farm over |
+
+Click a tile or drag across several; the tile under the pointer is outlined in
+the brush's colour. Dirt and Stone never fill a tile with an ant, brood, a body
+or an intruder on it, food or water lying there, or the mouth of an entrance,
+and never put ground in mid-air. Dig never pulls the ground out from under food
+or water. None of them touch buried food or the bottom row. On the house farm
+the server checks the keeper's sign-in and applies the same rules. Leaving edit
+mode puts down whatever brush was in hand.
 
 ## Recycling
 
@@ -645,7 +657,8 @@ farm still runs; it just won't survive a refresh.
 |---|---|
 | `Space` | pause / resume |
 | `F` / `W` | food / water tool (Auto-tend does it for you) |
-| `D` | turn-to-dirt tool: click or drag over rock or open ground |
+| `E` | edit mode (keepers) |
+| `D` / `X` / `R` | dirt / dig / stone brush: click or drag |
 | `P` | show pheromone trails (green = food trail, red = alarm) |
 | `N` | show the nest blueprint and how far each chamber is dug |
 | scroll / drag | zoom / pan |

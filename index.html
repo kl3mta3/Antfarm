@@ -22,24 +22,35 @@
       <button id="btnFood" class="food keeper">Drop food</button>
       <button id="btnWater" class="water keeper">Drop water</button>
       <button id="btnAuto" class="keeper">Auto-tend</button>
-      <button id="btnQueen" class="keeper">Add queen</button>
-      <button id="btnDirt" class="keeper" title="Click or drag over rock or open ground to turn it into soil. Ants, brood and entrances are left alone.">Turn to dirt</button>
+      <button id="btnEdit" class="keeper" title="Reshape the ground, add a queen or start a new colony (E)">Edit</button>
       <span class="sep keeper"></span>
       <button id="btnPh">Pheromones</button>
       <button id="btnPlan" class="keeper">Nest plan</button>
       <button id="btnFollow">Follow ant</button>
       <span class="sep"></span>
       <button id="btnFit">Fit view</button>
-      <button id="btnReset" class="keeper">New colony</button>
       <span class="sep"></span>
       <button id="btnAuth">Admin</button>
       <button id="btnOwn" class="primary" title="A farm of your own, running in your browser. No account needed.">Personal Farm</button>
       <button id="btnHouse" title="Back to the farm everyone watches" hidden>Switch to Main Farm</button>
       <button id="btnBookmark" title="Keep a link to your farm so you can come back to it" hidden>Bookmark your farm</button>
     </div>
-    <div id="flash" hidden></div>
+    <!-- Keepers' edit mode: everything that reshapes the farm, in one place. -->
+    <div id="editBar" hidden>
+      <span class="tblabel">Edit</span>
+      <button id="btnDirt" class="brush dirt" title="Click or drag: rock or open ground becomes soil (D)">Dirt</button>
+      <button id="btnDig" class="brush dig" title="Click or drag: soil or stone is dug out, leaving open space (X)">Dig</button>
+      <button id="btnStone" class="brush stone" title="Click or drag: soil or open ground becomes stone the ants can't cut (R)">Stone</button>
+      <span class="sep"></span>
+      <button id="btnQueen">Add queen</button>
+      <button id="btnReset">New colony</button>
+      <span class="edithint">Drag to paint. Ants, brood, food, water and entrances are left alone.</span>
+    </div>
     <div id="canvasWrap">
       <canvas id="farm"></canvas>
+      <!-- Messages float over the top of the farm, so one appearing or going
+           away never shifts the view (or a brush stroke) under the pointer. -->
+      <div id="flash" hidden></div>
       <!-- Zoom buttons for touch screens; hidden with a mouse (see style.css). -->
       <div id="zoomPad">
         <button type="button" id="zoomIn" aria-label="Zoom in">+</button>

@@ -405,16 +405,18 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         }
         return { ok: false, error: 'Unknown rename.' };
       }
-      case 'dirt': {
-        // A keeper's brush stroke: rock or open ground turned to soil, a batch
-        // of tiles at a time. The world decides tile by tile what is allowed
-        // (never under an ant, brood or an entrance).
+      case 'dirt':          // the tool's first form; same as paint with kind 'dirt'
+      case 'paint': {
+        // A keeper's brush stroke — dirt, stone or dig — a batch of tiles at a
+        // time. The world decides tile by tile what is allowed.
+        const kind = a.type === 'dirt' ? 'dirt' : a.kind;
+        if (kind !== 'dirt' && kind !== 'stone' && kind !== 'dig') return { ok: false, error: 'Unknown brush.' };
         if (!Array.isArray(a.tiles) || !a.tiles.length || a.tiles.length > 64) {
-          return { ok: false, error: 'Nothing to turn to dirt.' };
+          return { ok: false, error: 'Nothing to change.' };
         }
         let filled = 0;
         for (const t of a.tiles) {
-          if (Array.isArray(t) && W.fillSoil(Number(t[0]), Number(t[1]))) filled++;
+          if (Array.isArray(t) && W.paintTile(Number(t[0]), Number(t[1]), kind)) filled++;
         }
         return { ok: true, filled };
       }

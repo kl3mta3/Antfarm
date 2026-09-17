@@ -428,37 +428,56 @@
     return true;
   }
 
-  // A keeper turning a tile back into soil: bare rock, or an open tile in the
-  // ground or directly on top of it (not floating in the sky). Never where it
-  // could hurt or shut anyone in: a tile with an ant, brood, a body or an
-  // intruder on it, food or water lying there, or the mouth of an entrance.
-  // Returns whether the tile changed.
-  world.fillSoil = function (x, y) {
-    if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
-    if (x < 1 || x >= W - 1 || y < C.SPOIL_CEILING || y >= H) return false;
+  // A keeper reshaping the ground, one tile at a time.
+  //   dirt   bare rock or open space becomes soil
+  //   stone  soil, spoil or open space becomes rock
+  //   dig    soil, spoil or rock becomes open space
+  // Buried food is left for the ants to find, and the bottom row stays solid.
+  // Filling (dirt, stone) never happens where it could bury or shut in
+  // anything: a tile with an ant, brood, a body or an intruder on it, food or
+  // water lying there, or the mouth of an entrance, and never floating in the
+  // sky. Digging can't trap anyone, so it only avoids pulling the ground out
+  // from under food and water. Returns whether the tile changed.
+  const PAINT = {
+    dirt: { to: T.SOIL, from: [T.ROCK, T.AIR] },
+    stone: { to: T.ROCK, from: [T.SOIL, T.MOUND, T.AIR] },
+    dig: { to: T.AIR, from: [T.SOIL, T.MOUND, T.ROCK] },
+  };
+  world.paintTile = function (x, y, kind) {
+    const rule = PAINT[kind];
+    if (!rule || !Number.isInteger(x) || !Number.isInteger(y)) return false;
+    if (x < 1 || x >= W - 1 || y < C.SPOIL_CEILING || y >= H - 1) return false;
     const t = tiles[idx(x, y)];
-    if (t !== T.ROCK && t !== T.AIR) return false;
-    if (t === T.AIR && y < surfY[x] - 1) return false;
-    if (occupied(x, y)) return false;
-    tiles[idx(x, y)] = T.SOIL;
+    if (!rule.from.includes(t)) return false;
+    if (kind === 'dig') {
+      if (occupied(x, y, false)) return false;
+    } else {
+      if (t === T.AIR && y < surfY[x] - 1) return false;
+      if (occupied(x, y, true)) return false;
+    }
+    tiles[idx(x, y)] = rule.to;
     world.refreshColumn(x);
     world.dirty = true;
     world.fieldsStale = true;
     return true;
   };
+  world.fillSoil = (x, y) => world.paintTile(x, y, 'dirt');
 
-  function occupied(x, y) {
+  // `living`: also count ants, brood, bodies, intruders and entrance mouths.
+  function occupied(x, y, living) {
     const near = (px, py, r) => px + r > x && px - r < x + 1 && py + r > y && py - r < y + 1;
     const col = AF.colony;
     if (col) {
+      for (const p of col.piles) if (near(p.x, p.y, 1.2)) return true;
+      for (const p of col.puddles) if (near(p.x, p.y, 1.6)) return true;
+      if (!living) return false;
       const A = col.A, B = col.B;
       for (let i = 0; i < C.MAX_ANTS; i++) if (A.alive[i] && near(A.x[i], A.y[i], 0.7)) return true;
       for (let b = 0; b < C.MAX_BROOD; b++) if (B.alive[b] && near(B.x[b], B.y[b], 0.7)) return true;
       for (const c of col.corpses) if (near(c.x, c.y, 0.7)) return true;
-      for (const p of col.piles) if (near(p.x, p.y, 1.2)) return true;
-      for (const p of col.puddles) if (near(p.x, p.y, 1.6)) return true;
       for (const t of col.intruders) if (near(t.x, t.y, 2.2)) return true;
     }
+    if (!living) return false;
     const nests = AF.nests;
     if (nests && nests.list) {
       for (const n of nests.list) {

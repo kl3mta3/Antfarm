@@ -703,9 +703,10 @@
   }
 
   function drawSelection(s) {
-    // The tile the dirt tool would change.
+    // The tile an edit brush would change, outlined in the brush's colour.
     if (R.hoverTile) {
-      ctx.strokeStyle = 'rgba(214,170,110,0.9)';
+      ctx.strokeStyle = R.hoverTile.kind === 'stone' ? 'rgba(190,196,210,0.95)'
+        : R.hoverTile.kind === 'dig' ? 'rgba(240,226,196,0.9)' : 'rgba(214,170,110,0.9)';
       ctx.lineWidth = Math.max(0.06, 1.5 / s);
       ctx.strokeRect(R.hoverTile.x, R.hoverTile.y, 1, 1);
     }

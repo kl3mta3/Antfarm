@@ -205,13 +205,26 @@
 
   let dragging = false, dragged = false, lastX = 0, lastY = 0;
 
-  // ---- turning ground to dirt ----
-  // With the dirt tool a press paints instead of panning: every tile the
-  // pointer passes over is turned to soil, if the world allows it there. On
-  // the house farm the tiles go to the server in batches, spaced out so a long
-  // stroke stays inside the rate limit.
+  // ---- edit brushes: dirt, dig, stone ----
+  // With a brush picked, a press paints instead of panning: every tile the
+  // pointer passes over is changed, where the world allows it. On the house
+  // farm the tiles go to the server in batches, spaced out so a long stroke
+  // stays inside the rate limit.
+  const BRUSHES = ['dirt', 'dig', 'stone'];
+  const isBrush = t => BRUSHES.includes(t);
+  const BRUSH_HELP = {
+    dirt: 'Click or drag over rock or open ground to turn it into soil.',
+    dig: 'Click or drag over soil or stone to dig it out.',
+    stone: "Click or drag over soil or open ground to turn it into stone the ants can't cut.",
+  };
+  const BRUSH_REFUSED = {
+    dirt: 'Only rock and open ground turn to dirt, and never under an ant, brood, food, water or an entrance.',
+    dig: 'Only soil and stone can be dug out, never from under food or water, and the bottom row stays.',
+    stone: 'Only soil and open ground turn to stone, and never under an ant, brood, food, water or an entrance.',
+  };
+  let editMode = false;
   let painting = false, lastPaint = null, paintFilled = 0, paintPending = 0;
-  let paintQueue = [], paintTimer = 0;
+  let paintQueue = [], paintTimer = 0, strokeKind = 'dirt', queueKind = 'dirt';
   const paintSeen = new Set();
   const PAINT_BATCH_MS = 400;
 
@@ -225,7 +238,9 @@
     const key = y * C.W + x;
     if (paintSeen.has(key)) return;
     paintSeen.add(key);
-    if (!HOUSE) { if (W.fillSoil(x, y)) paintFilled++; return; }
+    if (!HOUSE) { if (W.paintTile(x, y, strokeKind)) paintFilled++; return; }
+    if (paintQueue.length && queueKind !== strokeKind) flushPaint();
+    queueKind = strokeKind;
     paintQueue.push([x, y]);
     if (paintQueue.length >= 64) flushPaint();
     else if (!paintTimer) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
@@ -246,7 +261,7 @@
     if (!paintQueue.length) return;
     const tiles = paintQueue.splice(0, 64);
     paintPending++;
-    houseAct({ type: 'dirt', tiles }).then(res => {
+    houseAct({ type: 'paint', kind: queueKind, tiles }).then(res => {
       paintPending--;
       if (res.ok) paintFilled += res.filled || 0;
       if (!painting && !paintPending && !paintQueue.length) paintDone();
@@ -254,7 +269,9 @@
     if (paintQueue.length) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
   }
   function startPaint(clientX, clientY) {
+    if (HOUSE && paintQueue.length) flushPaint();
     painting = true;
+    strokeKind = tool;
     paintFilled = 0;
     paintSeen.clear();
     lastPaint = null;
@@ -268,20 +285,20 @@
   }
   function paintDone() {
     if (paintFilled === 0 && paintSeen.size) {
-      flash('Only rock and open ground turn to dirt, and never under an ant, brood, food, water or an entrance.');
+      flash(BRUSH_REFUSED[strokeKind]);
     }
     paintSeen.clear();
   }
 
   canvas.addEventListener('mousemove', e => {
-    if (tool !== 'dirt' || locked()) { R.hoverTile = null; return; }
+    if (!isBrush(tool) || locked()) { R.hoverTile = null; return; }
     const p = worldAt(e.clientX, e.clientY);
-    R.hoverTile = { x: Math.floor(p.x), y: Math.floor(p.y) };
+    R.hoverTile = { x: Math.floor(p.x), y: Math.floor(p.y), kind: tool };
   });
   canvas.addEventListener('mouseleave', () => { R.hoverTile = null; });
 
   canvas.addEventListener('mousedown', e => {
-    if (tool === 'dirt' && e.button === 0) {
+    if (isBrush(tool) && e.button === 0) {
       if (locked()) { setTool('select'); openLogin(); return; }
       startPaint(e.clientX, e.clientY);
       return;
@@ -424,7 +441,7 @@
         if (!res.ok) { flash(res.error); return; }
         setTool('select');
       }
-    } else if (tool === 'dirt') {
+    } else if (isBrush(tool)) {
       // A tap on a touch screen: one tile.
       if (locked()) { setTool('select'); openLogin(); return; }
       startPaint(e.clientX, e.clientY);
@@ -466,7 +483,10 @@
     if (k === ' ') { e.preventDefault(); togglePause(); }
     else if (k === 'f') setTool(tool === 'food' ? 'select' : 'food');
     else if (k === 'w') setTool(tool === 'water' ? 'select' : 'water');
-    else if (k === 'd') setTool(tool === 'dirt' ? 'select' : 'dirt');
+    else if (k === 'e') setEditMode(!editMode);
+    else if (k === 'd') pickBrush('dirt');
+    else if (k === 'x') pickBrush('dig');
+    else if (k === 'r') pickBrush('stone');
     else if (k === '[' || k === ']') {
       const stops = C.SPEED_STOPS;
       const cur = HOUSE ? AF.mirror.controls.speed : sim.speed;
@@ -490,8 +510,8 @@
   }
   function setTool(t) {
     tool = t;
-    canvas.style.cursor = t === 'select' ? 'crosshair' : t === 'dirt' ? 'cell' : 'copy';
-    if (t !== 'dirt') R.hoverTile = null;
+    canvas.style.cursor = t === 'select' ? 'crosshair' : isBrush(t) ? 'cell' : 'copy';
+    if (!isBrush(t)) R.hoverTile = null;
     syncButtons();
   }
 
@@ -550,10 +570,22 @@
     setTool(tool === 'queen' ? 'select' : 'queen');
     if (tool === 'queen') flash('Click the surface where the new queen should dig in.');
   });
-  $('btnDirt').onclick = guard(() => {
-    setTool(tool === 'dirt' ? 'select' : 'dirt');
-    if (tool === 'dirt') flash('Click or drag over rock or open ground to turn it into soil. Ants, brood and entrances are left alone.');
-  });
+  // Edit mode opens a second row with everything that reshapes the farm.
+  // Leaving it puts down whatever edit tool was in hand.
+  function setEditMode(on) {
+    editMode = on;
+    if (!on && (isBrush(tool) || tool === 'queen')) setTool('select');
+    else syncButtons();
+  }
+  function pickBrush(kind) {
+    if (!editMode) editMode = true;
+    setTool(tool === kind ? 'select' : kind);
+    if (tool === kind) flash(BRUSH_HELP[kind] + ' Ants, brood and entrances are left alone.');
+  }
+  $('btnEdit').onclick = guard(() => setEditMode(!editMode));
+  $('btnDirt').onclick = guard(() => pickBrush('dirt'));
+  $('btnDig').onclick = guard(() => pickBrush('dig'));
+  $('btnStone').onclick = guard(() => pickBrush('stone'));
   $('btnPh').onclick = () => { R.showPheromones = !R.showPheromones; syncButtons(); };
   $('btnPlan').onclick = guard(() => { R.showPlan = !R.showPlan; syncButtons(); });
   $('btnFollow').onclick = () => { R.follow = !R.follow; syncButtons(); };
@@ -776,6 +808,10 @@
     $('btnAuto').classList.toggle('on', HOUSE ? AF.mirror.controls.autoTend : autoTend);
     $('btnQueen').classList.toggle('on', tool === 'queen');
     $('btnDirt').classList.toggle('on', tool === 'dirt');
+    $('btnDig').classList.toggle('on', tool === 'dig');
+    $('btnStone').classList.toggle('on', tool === 'stone');
+    $('btnEdit').classList.toggle('on', editMode && !lock);
+    $('editBar').hidden = lock || !editMode;
     $('btnPh').classList.toggle('on', R.showPheromones);
     $('btnPlan').classList.toggle('on', R.showPlan);
     $('btnFollow').classList.toggle('on', R.follow);

@@ -35,13 +35,28 @@
   button.food.on { background: var(--green); color: #14200a; border-color: var(--green); }
   button.water.on { background: var(--blue); color: #041623; border-color: var(--blue); }
   .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+  /* Edit mode: a second row under the toolbar, only while it's switched on. */
+  #editBar {
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    background: #171b27; border-bottom: 1px solid var(--line);
+    box-shadow: inset 3px 0 0 var(--accent); flex-wrap: wrap;
+  }
+  #editBar[hidden] { display: none; }
+  .edithint { color: var(--dim); font-size: 11.5px; margin-left: 6px; }
+  button.brush.dirt.on { background: #8a6a48; color: #fff4e4; border-color: #b08a60; }
+  button.brush.dig.on { background: #0e1016; color: #f3e6c8; border-color: #d6aa6e; }
+  button.brush.stone.on { background: #6d7280; color: #f4f6fa; border-color: #9aa0ad; }
   .tblabel { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
 
   #flash {
-    padding: 7px 12px; background: rgba(255,210,74,.12);
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
+    padding: 7px 12px; background: rgba(28,24,12,.88);
     border-bottom: 1px solid rgba(255,210,74,.35);
     color: var(--accent); font-size: 12.5px;
+    pointer-events: none;
   }
+  #flash[hidden] { display: none; }
   #side {
     width: 340px; background: var(--panel); border-left: 1px solid var(--line);
     display: flex; flex-direction: column; overflow-y: auto;
@@ -137,13 +152,14 @@
       width: auto; flex: 0 0 40%;
       border-left: none; border-top: 1px solid var(--line);
     }
-    #toolbar { padding: 6px; gap: 4px; }
-    #toolbar button { padding: 4px 7px; font-size: 11px; }
+    #toolbar, #editBar { padding: 6px; gap: 4px; }
+    #toolbar button, #editBar button { padding: 4px 7px; font-size: 11px; }
+    .edithint { display: none; }
     .tblabel { display: none; }
   }
 
   /* ?embed=1: just the farm, framed inside another page */
-  .embed #toolbar, .embed #side, .embed #flash { display: none !important; }
+  .embed #toolbar, .embed #editBar, .embed #side, .embed #flash { display: none !important; }
   .embed #app { flex-direction: row; }
 
   /* ---- touch screens ----
