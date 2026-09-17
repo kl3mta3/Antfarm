@@ -29,7 +29,8 @@
   function newColony(queens) {
     R.selected = -1;
     R.selectedBrood = -1;
-    if (HOUSE) { houseAct({ type: 'new', queens }); return; }
+    undoStack.length = 0;             // the ground it would restore is gone
+    if (HOUSE) { houseAct({ type: 'new', queens }); syncButtons(); return; }
     AF.persist.clear();
     const q = queens == null ? 1 : queens;     // 0 is a real choice: bare ground
     W.generate(q);
@@ -223,10 +224,14 @@
     stone: 'Only soil and open ground turn to stone, and never under an ant, brood, food, water or an entrance.',
   };
   let editMode = false;
-  let painting = false, lastPaint = null, paintFilled = 0, paintPending = 0;
-  let paintQueue = [], paintTimer = 0, strokeKind = 'dirt', queueKind = 'dirt';
-  const paintSeen = new Set();
+  // Each stroke is a record of its own: what brush, which tiles it has
+  // passed, how many it changed, and (on your own farm) what they were, for
+  // undo. On the house farm the server keeps the "what they were" part.
+  let painting = false, lastPaint = null, stroke = null;
+  let paintQueue = [], paintTimer = 0, queueStroke = null;
   const PAINT_BATCH_MS = 400;
+  const UNDO_MAX = 50;
+  const undoStack = [];
 
   function worldAt(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
@@ -236,11 +241,18 @@
     const x = Math.floor(wx), y = Math.floor(wy);
     if (x < 0 || x >= C.W || y < 0 || y >= C.H) return;
     const key = y * C.W + x;
-    if (paintSeen.has(key)) return;
-    paintSeen.add(key);
-    if (!HOUSE) { if (W.paintTile(x, y, strokeKind)) paintFilled++; return; }
-    if (paintQueue.length && queueKind !== strokeKind) flushPaint();
-    queueKind = strokeKind;
+    if (stroke.seen.has(key)) return;
+    stroke.seen.add(key);
+    if (!HOUSE) {
+      const before = W.tileAt(x, y), surf = W.surfaceAt(x);
+      if (W.paintTile(x, y, stroke.kind)) {
+        stroke.filled++;
+        stroke.changes.push([x, y, W.tileAt(x, y), before, surf]);
+      }
+      return;
+    }
+    if (paintQueue.length && queueStroke !== stroke) flushPaint();
+    queueStroke = stroke;
     paintQueue.push([x, y]);
     if (paintQueue.length >= 64) flushPaint();
     else if (!paintTimer) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
@@ -259,35 +271,69 @@
     clearTimeout(paintTimer);
     paintTimer = 0;
     if (!paintQueue.length) return;
-    const tiles = paintQueue.splice(0, 64);
-    paintPending++;
-    houseAct({ type: 'paint', kind: queueKind, tiles }).then(res => {
-      paintPending--;
-      if (res.ok) paintFilled += res.filled || 0;
-      if (!painting && !paintPending && !paintQueue.length) paintDone();
+    const s = queueStroke, tiles = paintQueue.splice(0, 64);
+    s.pending++;
+    houseAct({ type: 'paint', kind: s.kind, stroke: s.id, tiles }).then(res => {
+      s.pending--;
+      if (res.ok) s.filled += res.filled || 0;
+      finishStroke(s);
     });
     if (paintQueue.length) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
   }
   function startPaint(clientX, clientY) {
     if (HOUSE && paintQueue.length) flushPaint();
+    stroke = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+      kind: tool, width: C.W, seen: new Set(), filled: 0, pending: 0, changes: [], ended: false,
+    };
     painting = true;
-    strokeKind = tool;
-    paintFilled = 0;
-    paintSeen.clear();
     lastPaint = null;
     paintStroke(clientX, clientY);
   }
   function endPaint() {
     painting = false;
     lastPaint = null;
-    if (HOUSE) { if (paintQueue.length && !paintTimer) flushPaint(); if (!paintPending && !paintQueue.length) paintDone(); }
-    else paintDone();
+    stroke.ended = true;
+    if (HOUSE && queueStroke === stroke && paintQueue.length && !paintTimer) flushPaint();
+    finishStroke(stroke);
   }
-  function paintDone() {
-    if (paintFilled === 0 && paintSeen.size) {
-      flash(BRUSH_REFUSED[strokeKind]);
+  // Once a stroke is over and the server has answered for all of it: keep it
+  // for undo if it changed anything, or say why it didn't.
+  function finishStroke(s) {
+    if (!s.ended || s.pending || s.done) return;
+    if (queueStroke === s && paintQueue.length) return;
+    s.done = true;
+    if (s.filled > 0) {
+      s.seen = null;
+      undoStack.push(s);
+      if (undoStack.length > UNDO_MAX) undoStack.shift();
+      syncButtons();
+    } else if (s.seen.size) {
+      flash(BRUSH_REFUSED[s.kind]);
     }
-    paintSeen.clear();
+  }
+
+  function undo() {
+    const s = undoStack.pop();
+    syncButtons();
+    if (!s) { flash('Nothing to undo.'); return; }
+    if (HOUSE) {
+      houseAct({ type: 'undo', stroke: s.id }).then(res => { if (res.ok) undone(s, res.restored, res.total); });
+      return;
+    }
+    if (s.width !== C.W) { flash('The farm has grown since, so that stroke can no longer be undone.'); return; }
+    let back = 0;
+    for (let k = s.changes.length - 1; k >= 0; k--) {
+      const [x, y, now, was, surf] = s.changes[k];
+      if (W.revertTile(x, y, now, was, surf)) back++;
+    }
+    undone(s, back, s.changes.length);
+  }
+  function undone(s, back, total) {
+    const left = total - back;
+    flash('Undid the last ' + s.kind + ' stroke' + (left > 0
+      ? ', except ' + left + ' tile' + (left === 1 ? '' : 's') + ' that changed since or had something on it.'
+      : '.'));
   }
 
   canvas.addEventListener('mousemove', e => {
@@ -475,6 +521,12 @@
       if (!$('newScrim').hidden) { closeNewColony(); return; }
       setTool('select'); return;
     }
+    // Shortcuts with Ctrl/⌘ belong to the browser (reload, print...), apart
+    // from undo.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if (k === 'z' && !e.shiftKey && !e.altKey && !locked() && editMode) { e.preventDefault(); undo(); }
+      return;
+    }
     if (k === 'p') { R.showPheromones = !R.showPheromones; syncButtons(); return; }
     // The nest plan is for keepers on the house farm (anyone on their own).
     if (k === 'n') { if (!locked()) { R.showPlan = !R.showPlan; syncButtons(); } return; }
@@ -586,6 +638,7 @@
   $('btnDirt').onclick = guard(() => pickBrush('dirt'));
   $('btnDig').onclick = guard(() => pickBrush('dig'));
   $('btnStone').onclick = guard(() => pickBrush('stone'));
+  $('btnUndo').onclick = guard(() => undo());
   $('btnPh').onclick = () => { R.showPheromones = !R.showPheromones; syncButtons(); };
   $('btnPlan').onclick = guard(() => { R.showPlan = !R.showPlan; syncButtons(); });
   $('btnFollow').onclick = () => { R.follow = !R.follow; syncButtons(); };
@@ -811,6 +864,7 @@
     $('btnDig').classList.toggle('on', tool === 'dig');
     $('btnStone').classList.toggle('on', tool === 'stone');
     $('btnEdit').classList.toggle('on', editMode && !lock);
+    $('btnUndo').disabled = undoStack.length === 0;
     $('editBar').hidden = lock || !editMode;
     $('btnPh').classList.toggle('on', R.showPheromones);
     $('btnPlan').classList.toggle('on', R.showPlan);

@@ -344,6 +344,12 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
 
   // ------------------------------------------------------ keeper actions
   // Called only after the server has checked the token.
+
+  // Recent brush strokes, by the id the keeper's browser gave them, for undo.
+  // Only the last few are kept, and only in memory.
+  const MAX_STROKES = 60;
+  const strokes = new Map();   // id -> { w: farm width then, changes: [[x, y, now, was, surf]] }
+  const strokeId = v => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v) ? v : null);
   house.act = function (a) {
     const x = Number(a.x);
     const onFarm = Number.isFinite(x) && x >= 0 && x < C.W;
@@ -377,6 +383,7 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         const q = Math.max(0, Math.min(3, Math.round(Number.isFinite(asked) ? asked : 1)));
         W.generate(q);
         col.reset(q);
+        strokes.clear();                 // nothing from the old ground can be undone
         lastTiles = null;                // everyone gets a fresh keyframe
         return { ok: true };
       }
@@ -414,11 +421,40 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         if (!Array.isArray(a.tiles) || !a.tiles.length || a.tiles.length > 64) {
           return { ok: false, error: 'Nothing to change.' };
         }
+        // Remember what each tile was, under the stroke's id, so the keeper
+        // who painted it can undo it.
+        const id = strokeId(a.stroke);
+        let rec = id ? strokes.get(id) : null;
+        if (id && !rec) {
+          rec = { w: C.W, changes: [] };
+          strokes.set(id, rec);
+          while (strokes.size > MAX_STROKES) strokes.delete(strokes.keys().next().value);
+        }
         let filled = 0;
         for (const t of a.tiles) {
-          if (Array.isArray(t) && W.paintTile(Number(t[0]), Number(t[1]), kind)) filled++;
+          if (!Array.isArray(t)) continue;
+          const x = Number(t[0]), y = Number(t[1]);
+          const before = W.tileAt(x, y), surf = W.surfaceAt(x);
+          if (!W.paintTile(x, y, kind)) continue;
+          filled++;
+          if (rec && rec.changes.length < 20000) rec.changes.push([x, y, W.tileAt(x, y), before, surf]);
         }
         return { ok: true, filled };
+      }
+      case 'undo': {
+        // Takes back one of this keeper's strokes (the browser keeps the ids,
+        // newest last). Tiles that changed since are left alone.
+        const id = strokeId(a.stroke);
+        const rec = id && strokes.get(id);
+        if (!rec) return { ok: false, error: 'That stroke can no longer be undone.' };
+        strokes.delete(id);
+        if (rec.w !== C.W) return { ok: false, error: 'The farm has grown since, so that stroke can no longer be undone.' };
+        let restored = 0;
+        for (let k = rec.changes.length - 1; k >= 0; k--) {
+          const [x, y, now, was, surf] = rec.changes[k];
+          if (W.revertTile(x, y, now, was, surf)) restored++;
+        }
+        return { ok: true, restored, total: rec.changes.length };
       }
       default:
         return { ok: false, error: 'Unknown action.' };

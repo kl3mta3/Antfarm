@@ -138,6 +138,7 @@
     // must be spaced out, and clear of the spoil heap.
     ANTS_PER_ENTRANCE: 55,
     ENTRANCE_MIN_GAP: 28,    // tiles between a nest's own entrances
+    ENTRANCE_RETRY: 10800,   // a failed shaft's spot is left alone this long (colony time: a day)
 
     // ---- food buried in the soil ----
     // Caches of something worth eating — root aphids, seeds, a dead beetle.

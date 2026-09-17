@@ -221,10 +221,16 @@
     // tiles down counted as "within reach" of a point on the surface, and the
     // shaft ended up somewhere no gallery would ever get to.
     const REACH = 34;
-    // Spots a shaft was already tried at and given up on — usually stone just
-    // under the turf. Re-siting there repeats the failure; one nest tried the
-    // same column three times running.
-    const tried = nest.plan.filter(n => n.type === 'entrance' && n.abandoned);
+    // Spots a shaft was already tried at and given up on. Re-siting there at
+    // once repeats the failure (one nest tried the same column three times
+    // running), so a spot is left alone for a colony day. Stone under the turf
+    // doesn't go away, so those are left alone for good. The memory used to be
+    // permanent: a nest that failed four times, for a reason since fixed, had
+    // ruled out every spot it could reach and never tried again. A failure
+    // with no date on it comes from an older save and no longer counts.
+    const now = AF.colony.lifeTick;
+    const tried = nest.plan.filter(n => n.type === 'entrance' && n.abandoned &&
+      (n.stone || (n.failedAt != null && now - n.failedAt < C.ENTRANCE_RETRY)));
     let best = null, bestScore = -Infinity;
     for (const e of nest.entrances) {
       for (const side of [-1, 1]) {
@@ -342,7 +348,7 @@
       }
       // Finished but capped, or open but leading nowhere. Give it up rather
       // than leaving it blocking the next attempt.
-      if (n.built >= 1) n.abandoned = true;
+      if (n.built >= 1) { n.abandoned = true; n.failedAt = AF.colony.lifeTick; }
     }
   };
 
@@ -811,6 +817,7 @@
         built: p.built, fails: p.fails, abandoned: !!p.abandoned,
         adopted: !!p.adopted, opportunistic: !!p.opportunistic, counted: !!p.counted,
         lx: p.lx, ly: p.ly, mx: p.mx, my: p.my, bored: p.bored || 0,
+        failedAt: p.failedAt, stone: !!p.stone,
       })),
       storeIdx: n.plan.indexOf(n.storeNode),
       broodIdx: n.plan.indexOf(n.broodNode),
@@ -845,6 +852,8 @@
         };
         if (p.lx != null) { node.lx = p.lx; node.ly = p.ly; }
         if (p.mx != null) { node.mx = p.mx; node.my = p.my; }
+        if (p.failedAt != null) node.failedAt = p.failedAt;
+        if (p.stone) node.stone = true;
         return node;
       });
       // Saves from before `adopted` was kept: a shaft whose column is already

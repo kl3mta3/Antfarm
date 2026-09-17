@@ -714,7 +714,7 @@
       // A site with a full crew is only an option when every site is full.
       // Without this, diggers sent away from a crowded room walked straight
       // back to it — nearness outweighed the crowding penalty.
-      if (n.claims >= MAX_CREW) {
+      if (n.claims >= crewCap(n)) {
         if (score < fullScore) { fullScore = score; full = n; }
         continue;
       }
@@ -789,7 +789,7 @@
         const d = Math.hypot(r.x - n.x, r.y - top);
         if (d < bd) { bd = d; n.lx = r.x; n.ly = r.y; }
       }
-      if (n.lx === undefined) { n.built = 1; n.abandoned = true; releaseNode(i, nest); return; }
+      if (n.lx === undefined) { n.built = 1; n.abandoned = true; n.failedAt = col.lifeTick; releaseNode(i, nest); return; }
     }
 
     const above = aboveGround(i);
@@ -807,11 +807,20 @@
       if (Math.abs(dx) > 0.6) { surfaceStep(i, dx > 0 ? 1 : -1); return; }
       if (!W.passable(x, top)) {
         if (!W.isDiggable(W.tileAt(x, top))) {   // stone at the turf
-          n.built = 1; n.abandoned = true; releaseNode(i, nest); return;
+          n.built = 1; n.abandoned = true; n.stone = true; n.failedAt = col.lifeTick;
+          releaseNode(i, nest); return;
         }
         startBore(i, top * C.W + x, n);
         return;
       }
+      // The mouth is open: climb down into it and carry on from inside. Left
+      // standing on the surface, a digger tried to bore toward the room from
+      // up there, found only sky in every direction it would cut, counted it
+      // as stone and turned round, forever. Seven diggers stood over one
+      // shaft for as long as it took to be given up.
+      A.x[i] = x + 0.5;
+      A.y[i] = top + 0.5;
+      A.hd[i] = Math.atan2(n.ly - A.y[i], n.lx - A.x[i]);
     }
 
     // Broken through into the nest? Checked every so often — it's a search.
@@ -821,21 +830,48 @@
     }
     if (n.conn) { n.built = 1; col.log(i, 13); releaseNode(i, nest); return; }
 
-    boreStep(i, n, n.lx, n.ly);
+    boreStep(i, n, n.lx, n.ly, x + 0.5, top + 0.5);
+  }
+
+  function nearestOnSegment(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const len2 = vx * vx + vy * vy;
+    const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len2)) : 0;
+    return { x: ax + vx * t, y: ay + vy * t };
   }
 
   // One step of a straight gallery: cut the next tile on the line, or walk on
-  // if it's already open, edging round stone.
-  function boreStep(i, n, tx, ty) {
+  // if it's already open, edging round stone. Given where the gallery starts
+  // (sx, sy), it stays one tile wide: only tiles on the line are cut. The
+  // crew used to cut whatever lay ahead of each of them, and a 35-tile shaft
+  // took 363 cuts and a heap of spoil to match. An ant off the line steps back
+  // onto it; one queued behind the digger at the face waits its turn.
+  const BORE_BAND = 0.85;   // half-width, in tiles: just enough for a gallery ants can walk
+  function boreStep(i, n, tx, ty, sx, sy) {
+    const lined = sx !== undefined;
+    if (lined && distToSegment(A.x[i], A.y[i], sx, sy, tx, ty) > BORE_BAND) {
+      const p = nearestOnSegment(A.x[i], A.y[i], sx, sy, tx, ty);
+      steer(i, Math.atan2(p.y - A.y[i], p.x - A.x[i]), 0.6);
+      if (tunnelStep(i)) return;
+      boreStep(i, n, p.x, p.y);                     // walled off from it: cut the way back
+      return;
+    }
     const want = Math.atan2(ty - A.y[i], tx - A.x[i]);
+    let waiting = false;
     for (const off of BORE) {
       const a = want + off;
       const fx = Math.floor(A.x[i] + Math.cos(a)), fy = Math.floor(A.y[i] + Math.sin(a));
       if (fy < W.surfaceAt(fx)) continue;          // never back out into the sky
       const t = W.tileAt(fx, fy);
-      if (W.isDiggable(t)) { startBore(i, fy * C.W + fx, n); return; }
+      if (W.isDiggable(t)) {
+        if (lined && distToSegment(fx + 0.5, fy + 0.5, sx, sy, tx, ty) > BORE_BAND) { waiting = true; continue; }
+        startBore(i, fy * C.W + fx, n);
+        return;
+      }
       if (W.passable(fx, fy)) { A.hd[i] = a; tunnelStep(i); return; }
     }
+    // Only soil beside the line ahead: someone else is at the face.
+    if (waiting) { fidget(i, 0.08, 0.15); return; }
     // Stone all round the face.
     n.fails = (n.fails || 0) + 1;
     A.hd[i] += Math.PI;
@@ -858,7 +894,7 @@
       digToward(i, n.mx, n.my);                     // get to our end of it first
       return;
     }
-    boreStep(i, n, n.x, n.y);
+    boreStep(i, n, n.x, n.y, n.mx, n.my);
   }
 
   function stepDigger(i, nest) {
@@ -1948,6 +1984,9 @@
   // diggers look.
   const REVIEW_EVERY = 120;
   const MAX_CREW = 8;          // diggers one unfinished site keeps; the rest re-pick
+  // A gallery is one tile wide, so only one digger at a time can work its
+  // face. A few more carry the spoil out; the rest are better used elsewhere.
+  const crewCap = n => (n.type === 'entrance' || n.type === 'breach') ? 4 : MAX_CREW;
   // A room that stalls with most of it dug is finished, not failed. The last
   // tile or two is usually tucked behind stone where no digger can stand, and
   // writing the whole chamber off for that left colonies believing they owned
@@ -1975,7 +2014,7 @@
       // could hold the whole crew — 27 of 27 in one test — while a new shaft
       // sat untouched until it timed out. Past a working crew, the rest are
       // sent to choose again, and the crowding penalty spreads them out.
-      if (site.built < 1 && site.claims >= MAX_CREW && A.state[i] !== ST.DIGGING) {
+      if (site.built < 1 && site.claims >= crewCap(site) && A.state[i] !== ST.DIGGING) {
         A.node[i] = -1;
         if (A.state[i] === ST.TO_DIG) A.state[i] = ST.IDLE;
         continue;
@@ -2017,7 +2056,7 @@
         const limit = (n.opportunistic ? 9000 : 6000) * 2;
         if (n.idleTicks > limit) {
           n.built = 1;
-          if (p < doneEnough(n)) n.abandoned = true;   // genuinely unreachable
+          if (p < doneEnough(n)) { n.abandoned = true; n.failedAt = col.lifeTick; }   // genuinely unreachable
         }
       }
     }

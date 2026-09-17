@@ -463,6 +463,31 @@
   };
   world.fillSoil = (x, y) => world.paintTile(x, y, 'dirt');
 
+  // Undoing a brush stroke, one tile at a time: `now` is what the brush left,
+  // `was` what was there before, `surf` the ground line at the time. A tile
+  // that has changed since (the ants dug it, say) is left as it is, and so is
+  // one where putting ground back would bury something now standing there, or
+  // taking it away would drop food or water. If the stroke had raised the
+  // ground line, it goes back down.
+  const REVERTIBLE = [T.AIR, T.SOIL, T.ROCK, T.MOUND];
+  world.revertTile = function (x, y, now, was, surf) {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
+    if (x < 1 || x >= W - 1 || y < 0 || y >= H - 1) return false;
+    if (!REVERTIBLE.includes(was) || now === was || tiles[idx(x, y)] !== now) return false;
+    if (occupied(x, y, was !== T.AIR)) return false;
+    tiles[idx(x, y)] = was;
+    if (was === T.AIR && surfY[x] === y && surf > y) {
+      let s = y;
+      while (s < surf && tiles[idx(x, s)] === T.AIR) s++;
+      surfY[x] = s;
+    } else {
+      world.refreshColumn(x);
+    }
+    world.dirty = true;
+    world.fieldsStale = true;
+    return true;
+  };
+
   // `living`: also count ants, brood, bodies, intruders and entrance mouths.
   function occupied(x, y, living) {
     const near = (px, py, r) => px + r > x && px - r < x + 1 && py + r > y && py - r < y + 1;
