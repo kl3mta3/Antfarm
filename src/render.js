@@ -9,6 +9,8 @@
     showPheromones: false,
     showPlan: false,
     selected: -1,
+    selectedBrood: -1,   // an egg, larva or pupa picked for the inspector
+    hoverTile: null,     // {x, y} under the pointer while turning ground to dirt
     follow: false,
   };
   AF.render = R;
@@ -172,11 +174,17 @@
     ctx.fillStyle = '#0b0d12';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (R.follow && R.selected >= 0 && A.alive[R.selected]) {
+    if (R.follow) {
       const viewW = canvas.width / s, viewH = canvas.height / s;
-      R.cam.x = A.x[R.selected] - viewW / 2;
-      R.cam.y = A.y[R.selected] - viewH / 2;
-      clampCam();
+      if (R.selected >= 0 && A.alive[R.selected]) {
+        R.cam.x = A.x[R.selected] - viewW / 2;
+        R.cam.y = A.y[R.selected] - viewH / 2;
+        clampCam();
+      } else if (R.selectedBrood >= 0 && B.alive[R.selectedBrood]) {
+        R.cam.x = B.x[R.selectedBrood] - viewW / 2;
+        R.cam.y = B.y[R.selectedBrood] - viewH / 2;
+        clampCam();
+      }
     }
 
     if (W.dirty) rebuildTerrain();
@@ -198,7 +206,7 @@
     drawStores();
     drawPiles();
     drawPuddles();
-    drawBrood();
+    drawBrood(s);
     drawCorpses();
     drawAnts(s);
     drawIntruders();
@@ -336,29 +344,32 @@
     }
   }
 
-  function drawBrood() {
+  // Brood, on the same pixel grid as the ants: eggs are little pearly ovals,
+  // larvae are pale segmented grubs that fatten as they grow (and go dull when
+  // hungry), pupae are tan silk cocoons with the dark spot at one end. Each
+  // lies at its own angle, in 45° steps so the pixels stay tidy. Zoomed right
+  // out they are just specks, like the ants.
+  function drawBrood(s) {
+    const detailed = s > 6;
     for (let b = 0; b < C.MAX_BROOD; b++) {
       if (!B.alive[b]) continue;
       const st = B.stage[b];
+      if (!detailed) {
+        ctx.fillStyle = st === 0 ? '#f0ead6' : st === 1 ? (B.fed[b] > 0 ? '#f6ecce' : '#cdbd95') : '#d6be8e';
+        const sz = st === 2 ? 0.8 : 0.6;
+        ctx.fillRect(B.x[b] - sz / 2, B.y[b] - sz / 2, sz, sz);
+        continue;
+      }
+      const hd = ((b * 5) % 8) / 8 * Math.PI * 2;
       if (st === 0) {
-        ctx.fillStyle = '#f0ead6';
-        ctx.beginPath();
-        ctx.ellipse(B.x[b], B.y[b], 0.42, 0.28, 0.4, 0, Math.PI * 2);
-        ctx.fill();
+        blit('egg', 'egg', BROOD_COLORS.egg, B.x[b], B.y[b], hd, 0);
       } else if (st === 1) {
-        const grow = 0.45 + 0.35 * Math.min(1, B.t[b] / C.LARVA_T);
-        ctx.fillStyle = B.fed[b] > 20 ? '#f6e7bd' : '#cdbd95';
-        ctx.beginPath();
-        ctx.ellipse(B.x[b], B.y[b], grow, grow * 0.62, 0.5, 0, Math.PI * 2);
-        ctx.fill();
+        const grow = B.t[b] / C.LARVA_T;
+        const kind = grow < 0.34 ? 'larvaS' : grow < 0.67 ? 'larvaM' : 'larvaL';
+        const fed = B.fed[b] > 0;
+        blit(kind, fed ? 'fed' : 'hungry', fed ? BROOD_COLORS.fed : BROOD_COLORS.hungry, B.x[b], B.y[b], hd, 0);
       } else {
-        ctx.fillStyle = '#d9c49a';
-        ctx.beginPath();
-        ctx.ellipse(B.x[b], B.y[b], 0.85, 0.5, 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(120,95,60,0.8)';
-        ctx.lineWidth = 0.12;
-        ctx.stroke();
+        blit('cocoon', 'cocoon', BROOD_COLORS.cocoon, B.x[b], B.y[b], hd, 0);
       }
     }
   }
@@ -462,6 +473,54 @@
        '....+...+...+...',
        '..+.....+.......'],
     ] },
+  };
+
+  // Brood, at the ants' resolution (8 pixels a tile), drawn facing right.
+  // 'o' rim   '#' body   '=' segment line   '*' shine   'h' larval head
+  // '-' cocoon seam   'k' the dark spot at the rear of a cocoon
+  const BROOD_PX = 1 / 8;
+  SPRITES.egg = { px: BROOD_PX, frames: [[
+    '.ooooo.',
+    'o*####o',
+    'o#####o',
+    '.ooooo.',
+  ]] };
+  SPRITES.larvaS = { px: BROOD_PX, frames: [[
+    '.oooo.',
+    'o#=#hh',
+    'o#=##o',
+    '.oooo.',
+  ]] };
+  SPRITES.larvaM = { px: BROOD_PX, frames: [[
+    '.oooooo.',
+    'o*=#=##o',
+    'o#=#=#hh',
+    'o#=#=##o',
+    '.oooooo.',
+  ]] };
+  SPRITES.larvaL = { px: BROOD_PX, frames: [[
+    '..oooooo..',
+    '.o*=#=#=oo',
+    'o##=#=#=#o',
+    'o##=#=#=hh',
+    '.o#=#=#=#o',
+    '..ooooooo.',
+  ]] };
+  SPRITES.cocoon = { px: BROOD_PX, frames: [[
+    '..oooooooo..',
+    '.o*#######o.',
+    'o##-##-##-#o',
+    'o##-##-##-ko',
+    '.o########o.',
+    '..oooooooo..',
+  ]] };
+
+  // A fourth number is opacity: the rim is a soft dark edge, like the ants'.
+  const BROOD_COLORS = {
+    egg: { 'o': [60, 52, 42, 190], '#': [240, 234, 214], '*': [255, 253, 244] },
+    fed: { 'o': [60, 50, 38, 200], '#': [246, 236, 206], '=': [212, 196, 158], '*': [255, 252, 238], 'h': [170, 124, 62] },
+    hungry: { 'o': [60, 50, 38, 200], '#': [205, 189, 149], '=': [168, 150, 110], '*': [224, 212, 178], 'h': [138, 100, 54] },
+    cocoon: { 'o': [80, 60, 36, 220], '#': [214, 190, 142], '-': [182, 156, 108], '*': [238, 222, 184], 'k': [70, 52, 36] },
   };
 
   const BEETLE_COLORS = {
@@ -602,7 +661,8 @@
         const rgb = colors[frame[sy][sx]];
         if (!rgb) continue;
         const p = (oy * n + ox) * 4;
-        img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2]; img.data[p + 3] = 255;
+        img.data[p] = rgb[0]; img.data[p + 1] = rgb[1]; img.data[p + 2] = rgb[2];
+        img.data[p + 3] = rgb.length > 3 ? rgb[3] : 255;
       }
     }
     g.putImageData(img, 0, 0);
@@ -643,20 +703,34 @@
   }
 
   function drawSelection(s) {
-    const i = R.selected;
-    if (i < 0 || !A.alive[i]) return;
+    // The tile the dirt tool would change.
+    if (R.hoverTile) {
+      ctx.strokeStyle = 'rgba(214,170,110,0.9)';
+      ctx.lineWidth = Math.max(0.06, 1.5 / s);
+      ctx.strokeRect(R.hoverTile.x, R.hoverTile.y, 1, 1);
+    }
+
+    let x, y, r;
+    if (R.selected >= 0 && A.alive[R.selected]) {
+      x = A.x[R.selected]; y = A.y[R.selected]; r = 2.2;
+    } else if (R.selectedBrood >= 0 && B.alive[R.selectedBrood]) {
+      x = B.x[R.selectedBrood]; y = B.y[R.selectedBrood]; r = 1.3;
+    } else {
+      return;
+    }
     const t = (performance.now() / 500) % (Math.PI * 2);
     ctx.strokeStyle = '#ffd24a';
     ctx.lineWidth = Math.max(0.1, 1.5 / s);
     ctx.beginPath();
-    ctx.arc(A.x[i], A.y[i], 2.2 + Math.sin(t) * 0.25, 0, Math.PI * 2);
+    ctx.arc(x, y, r + Math.sin(t) * 0.25 * r / 2.2, 0, Math.PI * 2);
     ctx.stroke();
+    const a = r * 1.27, b = r * 1.82;
     ctx.globalAlpha = 0.5;
     ctx.beginPath();
-    ctx.moveTo(A.x[i] - 4, A.y[i]); ctx.lineTo(A.x[i] - 2.8, A.y[i]);
-    ctx.moveTo(A.x[i] + 2.8, A.y[i]); ctx.lineTo(A.x[i] + 4, A.y[i]);
-    ctx.moveTo(A.x[i], A.y[i] - 4); ctx.lineTo(A.x[i], A.y[i] - 2.8);
-    ctx.moveTo(A.x[i], A.y[i] + 2.8); ctx.lineTo(A.x[i], A.y[i] + 4);
+    ctx.moveTo(x - b, y); ctx.lineTo(x - a, y);
+    ctx.moveTo(x + a, y); ctx.lineTo(x + b, y);
+    ctx.moveTo(x, y - b); ctx.lineTo(x, y - a);
+    ctx.moveTo(x, y + a); ctx.lineTo(x, y + b);
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
@@ -670,6 +744,18 @@
       const dx = A.x[i] - wx, dy = A.y[i] - wy;
       const d = dx * dx + dy * dy;
       if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  };
+
+  // The nearest egg, larva or pupa within a tile and a half, or -1.
+  R.pickBrood = function (wx, wy) {
+    let best = -1, bestD = 2.25;
+    for (let b = 0; b < C.MAX_BROOD; b++) {
+      if (!B.alive[b]) continue;
+      const dx = B.x[b] - wx, dy = B.y[b] - wy;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = b; }
     }
     return best;
   };

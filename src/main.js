@@ -1,7 +1,7 @@
 // Wiring: the real-time loop, caretaker tools, and the inspector panel.
 (function () {
   const AF = window.AF, C = AF.CFG, W = AF.world, col = AF.colony, sim = AF.sim, R = AF.render;
-  const A = col.A, CASTE = AF.CASTE, CARRY = AF.CARRY;
+  const A = col.A, B = col.B, CASTE = AF.CASTE, CARRY = AF.CARRY;
 
   const TICK_HZ = C.BASE_HZ;
   const STEP_MS = 1000 / TICK_HZ;
@@ -28,6 +28,7 @@
 
   function newColony(queens) {
     R.selected = -1;
+    R.selectedBrood = -1;
     if (HOUSE) { houseAct({ type: 'new', queens }); return; }
     AF.persist.clear();
     const q = queens == null ? 1 : queens;     // 0 is a real choice: bare ground
@@ -204,17 +205,99 @@
 
   let dragging = false, dragged = false, lastX = 0, lastY = 0;
 
+  // ---- turning ground to dirt ----
+  // With the dirt tool a press paints instead of panning: every tile the
+  // pointer passes over is turned to soil, if the world allows it there. On
+  // the house farm the tiles go to the server in batches, spaced out so a long
+  // stroke stays inside the rate limit.
+  let painting = false, lastPaint = null, paintFilled = 0, paintPending = 0;
+  let paintQueue = [], paintTimer = 0;
+  const paintSeen = new Set();
+  const PAINT_BATCH_MS = 400;
+
+  function worldAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    return R.screenToWorld(clientX - rect.left, clientY - rect.top);
+  }
+  function paintTile(wx, wy) {
+    const x = Math.floor(wx), y = Math.floor(wy);
+    if (x < 0 || x >= C.W || y < 0 || y >= C.H) return;
+    const key = y * C.W + x;
+    if (paintSeen.has(key)) return;
+    paintSeen.add(key);
+    if (!HOUSE) { if (W.fillSoil(x, y)) paintFilled++; return; }
+    paintQueue.push([x, y]);
+    if (paintQueue.length >= 64) flushPaint();
+    else if (!paintTimer) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
+  }
+  // Every tile along the way, so a quick stroke doesn't leave gaps.
+  function paintStroke(clientX, clientY) {
+    const p = worldAt(clientX, clientY);
+    const from = lastPaint || p;
+    const steps = Math.max(1, Math.ceil(Math.hypot(p.x - from.x, p.y - from.y) / 0.4));
+    for (let k = lastPaint ? 1 : 0; k <= steps; k++) {
+      paintTile(from.x + (p.x - from.x) * k / steps, from.y + (p.y - from.y) * k / steps);
+    }
+    lastPaint = p;
+  }
+  function flushPaint() {
+    clearTimeout(paintTimer);
+    paintTimer = 0;
+    if (!paintQueue.length) return;
+    const tiles = paintQueue.splice(0, 64);
+    paintPending++;
+    houseAct({ type: 'dirt', tiles }).then(res => {
+      paintPending--;
+      if (res.ok) paintFilled += res.filled || 0;
+      if (!painting && !paintPending && !paintQueue.length) paintDone();
+    });
+    if (paintQueue.length) paintTimer = setTimeout(flushPaint, PAINT_BATCH_MS);
+  }
+  function startPaint(clientX, clientY) {
+    painting = true;
+    paintFilled = 0;
+    paintSeen.clear();
+    lastPaint = null;
+    paintStroke(clientX, clientY);
+  }
+  function endPaint() {
+    painting = false;
+    lastPaint = null;
+    if (HOUSE) { if (paintQueue.length && !paintTimer) flushPaint(); if (!paintPending && !paintQueue.length) paintDone(); }
+    else paintDone();
+  }
+  function paintDone() {
+    if (paintFilled === 0 && paintSeen.size) {
+      flash('Only rock and open ground turn to dirt, and never under an ant, brood, food, water or an entrance.');
+    }
+    paintSeen.clear();
+  }
+
+  canvas.addEventListener('mousemove', e => {
+    if (tool !== 'dirt' || locked()) { R.hoverTile = null; return; }
+    const p = worldAt(e.clientX, e.clientY);
+    R.hoverTile = { x: Math.floor(p.x), y: Math.floor(p.y) };
+  });
+  canvas.addEventListener('mouseleave', () => { R.hoverTile = null; });
+
   canvas.addEventListener('mousedown', e => {
+    if (tool === 'dirt' && e.button === 0) {
+      if (locked()) { setTool('select'); openLogin(); return; }
+      startPaint(e.clientX, e.clientY);
+      return;
+    }
     dragging = true; dragged = false;
     lastX = e.clientX; lastY = e.clientY;
   });
 
   window.addEventListener('mouseup', e => {
+    if (painting) { endPaint(); return; }
     if (dragging && !dragged) handleClick(e);
     dragging = false;
   });
 
   window.addEventListener('mousemove', e => {
+    if (painting) { paintStroke(e.clientX, e.clientY); return; }
     if (!dragging) return;
     const dx = e.clientX - lastX, dy = e.clientY - lastY;
     if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
@@ -341,9 +424,25 @@
         if (!res.ok) { flash(res.error); return; }
         setTool('select');
       }
+    } else if (tool === 'dirt') {
+      // A tap on a touch screen: one tile.
+      if (locked()) { setTool('select'); openLogin(); return; }
+      startPaint(e.clientX, e.clientY);
+      endPaint();
     } else {
-      const i = R.pickAnt(p.x, p.y);
-      R.selected = i;
+      // Whichever is nearer, an ant or a piece of brood. Nurses stand over
+      // the brood they tend, so brood right under the pointer wins.
+      const i = R.pickAnt(p.x, p.y), b = R.pickBrood(p.x, p.y);
+      const di = i >= 0 ? (A.x[i] - p.x) ** 2 + (A.y[i] - p.y) ** 2 : Infinity;
+      const db = b >= 0 ? (B.x[b] - p.x) ** 2 + (B.y[b] - p.y) ** 2 : Infinity;
+      if (b >= 0 && (db <= di || db < 0.36)) {
+        R.selected = -1;
+        R.selectedBrood = b;
+        broodSel = { uid: B.uid[b], stage: B.stage[b], t: B.t[b], x: B.x[b], y: B.y[b] };
+      } else {
+        R.selected = i;
+        R.selectedBrood = -1;
+      }
       renderAntCard(true);
     }
   }
@@ -367,6 +466,7 @@
     if (k === ' ') { e.preventDefault(); togglePause(); }
     else if (k === 'f') setTool(tool === 'food' ? 'select' : 'food');
     else if (k === 'w') setTool(tool === 'water' ? 'select' : 'water');
+    else if (k === 'd') setTool(tool === 'dirt' ? 'select' : 'dirt');
     else if (k === '[' || k === ']') {
       const stops = C.SPEED_STOPS;
       const cur = HOUSE ? AF.mirror.controls.speed : sim.speed;
@@ -390,7 +490,8 @@
   }
   function setTool(t) {
     tool = t;
-    canvas.style.cursor = t === 'select' ? 'crosshair' : 'copy';
+    canvas.style.cursor = t === 'select' ? 'crosshair' : t === 'dirt' ? 'cell' : 'copy';
+    if (t !== 'dirt') R.hoverTile = null;
     syncButtons();
   }
 
@@ -448,6 +549,10 @@
     }
     setTool(tool === 'queen' ? 'select' : 'queen');
     if (tool === 'queen') flash('Click the surface where the new queen should dig in.');
+  });
+  $('btnDirt').onclick = guard(() => {
+    setTool(tool === 'dirt' ? 'select' : 'dirt');
+    if (tool === 'dirt') flash('Click or drag over rock or open ground to turn it into soil. Ants, brood and entrances are left alone.');
   });
   $('btnPh').onclick = () => { R.showPheromones = !R.showPheromones; syncButtons(); };
   $('btnPlan').onclick = guard(() => { R.showPlan = !R.showPlan; syncButtons(); });
@@ -670,6 +775,7 @@
     $('btnWater').classList.toggle('on', tool === 'water');
     $('btnAuto').classList.toggle('on', HOUSE ? AF.mirror.controls.autoTend : autoTend);
     $('btnQueen').classList.toggle('on', tool === 'queen');
+    $('btnDirt').classList.toggle('on', tool === 'dirt');
     $('btnPh').classList.toggle('on', R.showPheromones);
     $('btnPlan').classList.toggle('on', R.showPlan);
     $('btnFollow').classList.toggle('on', R.follow);
@@ -894,9 +1000,114 @@
     return Math.round(secs / 60) + 'm ago';
   }
 
-  function renderAntCard(force) {
-    const i = R.selected;
+  // ------------------------------------------------------- brood inspector
+  //
+  // An egg, larva or pupa picked on the farm. Brood slots are reused, so the
+  // selection remembers what it picked; if that one is gone (it came out as
+  // an adult, starved, or was carried off) the card says so rather than
+  // quietly showing whatever took its place.
+  const STAGE_NAME = ['Egg', 'Larva', 'Pupa'];
+  let broodSel = null;
+
+  function broodGone(b) {
+    if (!B.alive[b]) return true;
+    if (!HOUSE && B.uid[b] !== broodSel.uid) return true;   // the house farm doesn't send brood ids
+    return B.stage[b] < broodSel.stage;
+  }
+
+  function broodTimeNote() {
+    const speed = (HOUSE ? AF.mirror.controls.speed : sim.speed) || 1;
+    return speed === 1 ? 'Times are real time.'
+      : 'Times are farm time. At ' + speed + '× they pass ' + speed + ' times faster.';
+  }
+
+  function renderBroodCard() {
+    const b = R.selectedBrood;
     const card = $('antCard');
+    card.dataset.empty = '';
+
+    if (broodGone(b)) {
+      const emerged = broodSel.stage === 2 && broodSel.t >= C.PUPA_T * 0.95;
+      // On your own farm, follow it into adulthood: the newest ant where it lay.
+      if (emerged && !HOUSE) {
+        let best = -1, bestD = 9;
+        for (let i = 0; i < C.MAX_ANTS; i++) {
+          if (!A.alive[i] || A.age[i] > C.DAY_TICKS / 24) continue;
+          const d = (A.x[i] - broodSel.x) ** 2 + (A.y[i] - broodSel.y) ** 2;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        if (best >= 0) {
+          R.selectedBrood = -1;
+          R.selected = best;
+          flash('It came out of its cocoon as a ' + AF.CASTE_NAME[A.caste[best]].toLowerCase() + '.');
+          renderAntCard(true);
+          return;
+        }
+      }
+      card.innerHTML = '<h2>Inspector</h2>' +
+        '<div class="name">' + STAGE_NAME[broodSel.stage] + '</div>' +
+        '<div class="thought">' + (emerged
+          ? 'It has come out of its cocoon as a new adult.'
+          : 'It is gone. Brood that goes unfed for too long dies, and raiders carry brood off.') + '</div>' +
+        '<button id="clearSel">Clear</button>';
+      const btn = $('clearSel');
+      if (btn) btn.onclick = () => { R.selectedBrood = -1; renderAntCard(true); };
+      return;
+    }
+
+    const st = B.stage[b], t = Math.max(0, B.t[b]);
+    broodSel.stage = st; broodSel.t = B.t[b]; broodSel.x = B.x[b]; broodSel.y = B.y[b];
+    const nest = AF.nests.get(B.nest[b]);
+    const span = [C.EGG_T, C.LARVA_T, C.PUPA_T][st];
+    const pct = Math.min(100, t / span * 100);
+    const left = lifeText(Math.max(0, span - t));
+    const carried = B.held[b] >= 0;
+    const hungry = st === 1 && B.fed[b] <= 0;
+    const waiting = st === 2 && B.t[b] >= C.PUPA_T - 60;
+
+    let thought;
+    if (carried) thought = 'Being carried by a nurse. Brood doesn\'t develop while it\'s being moved.';
+    else if (st === 0) thought = 'An egg, laid by the queen and kept with the others in the nursery. It needs nothing but time.';
+    else if (hungry) thought = 'Hungry. It has stopped growing, and it will start to waste away if a nurse doesn\'t feed it soon.';
+    else if (st === 1) thought = 'A growing larva. It only grows while it has food in it, and the nurses keep coming back to feed it.';
+    else if (waiting) thought = 'Ready to come out, but the colony can\'t yet spare what a new adult takes.';
+    else thought = 'A pupa, spun into its cocoon and turning into an adult. It doesn\'t eat.';
+
+    const steps = ['Egg', 'Larva', 'Pupa', 'Adult']
+      .map((s, k) => k === st ? '<b>' + s + '</b>' : s).join(' &rarr; ');
+    const next = st === 0 ? 'Hatches in' : st === 1 ? 'Pupates in' : 'Emerges in';
+    const depth = Math.max(0, B.y[b] - W.surfaceAt(B.x[b]));
+
+    let html = '<h2>Inspector</h2>' +
+      '<div class="row"><span class="name">' + STAGE_NAME[st] + (HOUSE ? '' : ' #' + B.uid[b]) + '</span>' +
+      (nest ? '<span class="badge" style="background:' + nest.colors.nurse + '">Brood</span>' : '') + '</div>' +
+      (nest && AF.nests.count() > 1
+        ? '<div class="row"><span class="k">Nest</span><span class="v">' + esc(nestLabel(nest)) + '</span></div>'
+        : '') +
+      '<div class="row"><span class="k">Stage</span><span class="v">' + steps + '</span></div>' +
+      '<div class="thought">' + thought + '</div>' +
+      '<div class="row"><span class="k">Development</span><span class="v">' + Math.floor(pct) + '%</span></div>' +
+      '<div class="bar"><i style="width:' + pct + '%;background:#d9c49a"></i></div>' +
+      '<div class="row"><span class="k">' + next + '</span><span class="v">' +
+        (waiting ? 'any time now' : (hungry ? 'paused &middot; ' : '') + 'about ' + left + (st === 1 && !hungry ? ' if kept fed' : '')) +
+      '</span></div>';
+    if (st === 1) html += bar('Food in it', Math.max(0, B.fed[b]), 240, 'var(--green)');
+    html += '<div class="row"><span class="k">Carried</span><span class="v">' +
+        (carried ? (!HOUSE && A.alive[B.held[b]] ? 'by ' + esc(antLabel(B.held[b])) : 'yes') : 'no') + '</span></div>' +
+      '<div class="row"><span class="k">Position</span><span class="v">' +
+        B.x[b].toFixed(0) + ', ' + B.y[b].toFixed(0) + ' &middot; ' + depth.toFixed(0) + ' deep</span></div>' +
+      '<div class="hint">' + broodTimeNote() + '</div>';
+    card.innerHTML = html;
+  }
+
+  function renderAntCard(force) {
+    const card = $('antCard');
+    if (R.selectedBrood >= 0 && broodSel) {
+      if (!force && held('antCard')) return;
+      renderBroodCard();
+      return;
+    }
+    const i = R.selected;
     if (!force && i >= 0 && held('antCard')) return;
 
     if (i < 0) {

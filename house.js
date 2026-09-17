@@ -405,6 +405,19 @@ function createHouse({ root, dataFile, build = '', log = console.log }) {
         }
         return { ok: false, error: 'Unknown rename.' };
       }
+      case 'dirt': {
+        // A keeper's brush stroke: rock or open ground turned to soil, a batch
+        // of tiles at a time. The world decides tile by tile what is allowed
+        // (never under an ant, brood or an entrance).
+        if (!Array.isArray(a.tiles) || !a.tiles.length || a.tiles.length > 64) {
+          return { ok: false, error: 'Nothing to turn to dirt.' };
+        }
+        let filled = 0;
+        for (const t of a.tiles) {
+          if (Array.isArray(t) && W.fillSoil(Number(t[0]), Number(t[1]))) filled++;
+        }
+        return { ok: true, filled };
+      }
       default:
         return { ok: false, error: 'Unknown action.' };
     }

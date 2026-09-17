@@ -18,7 +18,7 @@ ANTFARM_USER=you ANTFARM_PASSWORD=something docker compose up --build
 ## Signing in
 
 Watching the farm needs no account. **Signing in unlocks the controls that
-change it,** pausing, speed, dropping food and water, auto-tend, founding a new
+change it** — pausing, speed, dropping food and water, auto-tend, founding a new
 colony. Looking at pheromones, the nest plan, following an ant, framing the
 view and clicking ants to inspect them all work signed out.
 
@@ -28,31 +28,31 @@ in constant time. The defaults are `keeper` / `antfarm`, and the server warns in
 its log if you leave them.
 
 Be clear about what this buys you. **The simulation runs in the browser**, so
-the gate stops someone using the panel, not someone opening devtools. It is a
+the gate stops someone using the panel — not someone opening devtools. It is a
 lock on the controls, not security. Real enforcement would mean moving the
 simulation server-side, which is a much bigger job than this.
 
 ## The idea
 
-Every ant runs the same tiny state machine. It senses a few local things; a
+Every ant runs the same tiny state machine. It senses a few local things — a
 pheromone level, one distance-field reading, whatever is within a couple of
-tiles, picks a state, and acts. No ant knows the plan. The nest, the foraging
+tiles — picks a state, and acts. No ant knows the plan. The nest, the foraging
 trails and the division of labour are what happen when a few hundred of these
 run at once.
 
 That's the whole design constraint, and it's why you can have thousands of them:
 an ant is ~90 bytes in a set of parallel typed arrays, and a full tick with 2000
-ants costs about **0.5 ms**, roughly 30× faster than real time needs.
+ants costs about **0.5 ms** — roughly 30× faster than real time needs.
 
 ## You are the caretaker
 
 The colony cannot survive on its own. Food piles and water get consumed, puddles
 evaporate, and nothing replaces them but you.
 
-- **Drop food** - click the button, then click the surface. Green crumbs.
-- **Drop water** - same, blue puddle. Water drains faster than food, and an
+- **Drop food** — click the button, then click the surface. Green crumbs.
+- **Drop water** — same, blue puddle. Water drains faster than food, and an
   unwatered farm always dies of thirst first.
-- **Auto-tend** - hand the job back to the farm. It keeps food and water topped
+- **Auto-tend** — hand the job back to the farm. It keeps food and water topped
   up in proportion to the colony's size, in drops that also scale with it. It
   drops more whenever a nest's stores run low, **and** whenever there's barely
   anything left lying out near it, so food and water stay visible on the surface
@@ -62,7 +62,7 @@ evaporate, and nothing replaces them but you.
 
 **Water goes near the entrance; food gets scattered.** That split is deliberate.
 Thirst kills faster than hunger, so a reliable drink is what makes a long search
-survivable; and it is how you'd tend a real farm anyway, topping up one
+survivable — and it is how you'd tend a real farm anyway, topping up one
 reservoir. Food lands anywhere inside the colony's foraging range, so they have
 to go and look for it.
 
@@ -78,7 +78,7 @@ then starves. The side panel warns you before anything dies.
 | **Digger** | Cuts tunnels and chambers, then hauls the spoil all the way out to the mound on the surface. |
 | **Nurse** | Carries eggs to the nursery and feeds larvae. A larva only grows while it is being fed. |
 | **Soldier** | Patrols, follows alarm pheromone, fights intruders, and raids. |
-| **Undertaker** | Carries the dead out, to the waste chamber, or the midden if there isn't one yet. |
+| **Undertaker** | Carries the dead out — to the waste chamber, or the midden if there isn't one yet. |
 
 Workers **change jobs** as needs shift. That matters more than it sounds: with
 caste fixed at birth, a colony that loses its last nurse during a famine can
@@ -117,14 +117,14 @@ its own**. Everything else follows from that one signal.
 The queen is the only thing in the simulation that makes a decision rather than
 following a rule. She cannot see the farm. She knows how full her larder is, how
 much room is left to dig, and how strongly her workers keep coming home smelling
-of strangers, and she commits to a stance for a while:
+of strangers — and she commits to a stance for a while:
 
 | | |
 |---|---|
 | **Growing** | nurses and foragers; the default when things are fine |
 | **Expanding** | diggers, when the nest is crowded for the rooms it has |
 | **Defensive** | soldiers, when neighbours keep turning up |
-| **Raiding** | soldiers, and sent out, hungry, threatened, and numerous enough |
+| **Raiding** | soldiers, and sent out — hungry, threatened, and numerous enough |
 
 The stance tilts what every new adult is raised as, so a nest that keeps meeting
 strangers quietly turns into a nest full of soldiers. There is real randomness in
@@ -132,7 +132,7 @@ the choice, so two colonies in the same position do not always do the same
 thing — and a small colony will not pick a fight whatever else is true.
 
 Each nest's card shows what its queen is currently doing, whether she knows
-about neighbours, and, once there is anything in it, its war ledger:
+about neighbours, and — once there is anything in it — its war ledger:
 
 | | |
 |---|---|
@@ -146,13 +146,16 @@ about neighbours, and, once there is anything in it, its war ledger:
 
 A colony's foraging range grows with its size: a big nest strips the ground near
 home and has to push further out, which is why real colonies work larger
-territories. Auto-tend scatters food across that range;  always inside it, since
+territories. Auto-tend scatters food across that range — always inside it, since
 an ant turns back at the edge and would never reach a pile beyond.
 
 Two rules make long-range searching work at all, and both were found the hard
 way:
 
-**Sweep, don't mill.** Left to drift A searching ant commits to a direction and holds it to the edge of its range.
+**Sweep, don't mill.** Left to drift, a searching ant reversed direction every
+ten tiles or so and never got clear of its own doorstep. Food a hundred tiles
+out simply never got found — 500-odd sat uncollected while the larder ran dry. A
+searching ant now commits to a direction and holds it to the edge of its range.
 
 **Turn back while you still can.** An ant heads home when its water won't cover
 the return trip. Widening the search range without that rule just means dying
@@ -165,17 +168,18 @@ still real.
 
 ## Food buried in the soil
 
-There are caches down there; call them root aphids, seeds, a dead beetle.
+There are caches down there — call them root aphids, seeds, a dead beetle.
 Digging is otherwise pure cost, and these give it a return, a direction, and
 something two colonies can want at the same time.
 
-They give off a smell that carries through soil, and it biases where a nest digs, *slightly*. Lean on it too hard and colonies beeline for food and stop
+They give off a smell that carries through soil, and it biases where a nest digs
+— *slightly*. Lean on it too hard and colonies beeline for food and stop
 building nests, which is worse to watch. Beyond that bias, a colony that can
 smell a cache from ground it has already opened will cut a spur to it
 deliberately, one prize at a time.
 
 Every nest gets one placed within reach at founding, and with neighbours there
-are more buried in the ground between them, a fixed prize both can reach is a
+are more buried in the ground between them — a fixed prize both can reach is a
 cleaner reason for two colonies to meet than waiting for one to get hungry.
 
 They are finite and deliberately modest: in practice they run at **3–11% of a
@@ -189,7 +193,7 @@ costs essentially nothing per frame.
 ## The dead
 
 An ant that dies leaves a body where it fell. Its substance does not come back
-to anyone until an undertaker carries it out, real ants do this, and it has a
+to anyone until an undertaker carries it out — real ants do this, and it has a
 name: necrophoresis.
 
 A body cleared properly returns its full biomass. A body left to rot returns
@@ -197,14 +201,16 @@ A body cleared properly returns its full biomass. A body left to rot returns
 keeping undertakers on the payroll. A stranger's body is not refuse at all: it
 is protein, and gets carried to the larder rather than the midden.
 
-The colony notices bodies piling up the way it notices any other shortage,
-after a bad fight it puts more hands on clearing the floor.
+The colony notices bodies piling up the way it notices any other shortage —
+after a bad fight it puts more hands on clearing the floor. Two undertakers were
+enough to clear 80 of 95 bodies over a long run; without the crew, the same farm
+left 40 lying in the tunnels and lost most of that biomass to rot.
 
 ## Adding a queen later
 
 **Add queen**, then click the surface where she should dig in. She arrives as a
-stranger, her own color, her own entrance, a handful of workers and nothing
-dug, while every existing colony carries on untouched. Useful when one nest has
+stranger — her own colour, her own entrance, a handful of workers and nothing
+dug — while every existing colony carries on untouched. Useful when one nest has
 run away with the farm and you want to put something new in its path.
 
 The spot has to be clear of the farm's edges and at least 55 tiles from any
@@ -220,12 +226,27 @@ personally delivered or dug or fed — and a log of its recent actions.
 It also shows its **pool slot and use count**, which is where the recycling is
 visible.
 
+Eggs, larvae and pupae can be clicked too. The inspector shows the stage, how
+far along it is, roughly how long until the next stage, whether a larva has
+food in it (a hungry one stops growing), and whether a nurse is carrying it.
+On your own farm, a pupa you are watching hands over to the new adult when it
+comes out.
+
+## Turning ground to dirt
+
+Keepers get a **Turn to dirt** tool (`D`). Click or drag over bare rock or open
+ground and it becomes ordinary soil, for filling in a tunnel, closing off a
+failed shaft, or opening up rock the ants can't cut. It never changes a tile
+with an ant, brood, a body or an intruder on it, food or water lying there, or
+the mouth of an entrance, and it won't put soil in mid-air. On the house farm
+the server checks the keeper's sign-in and applies the same rules.
+
 ## Recycling
 
 Ants live in fixed typed arrays allocated once at startup. An ant *is* an index.
 
 When one dies its index goes back onto a free stack and the next pupa to mature
-reuses it, so `#412 · use 7` means six ants have already lived and died in that
+reuses it — so `#412 · use 7` means six ants have already lived and died in that
 slot. Nothing is allocated at runtime.
 
 Its body goes back too: corpses return **biomass** to a shared pool, and every
@@ -236,7 +257,7 @@ reason a collapse is ever recoverable.
 ## The nest keeps growing
 
 The colony wants roughly `8 + population/8` rooms, so **a bigger colony digs a
-bigger nest,** and since population is set by how often you feed them, feeding
+bigger nest** — and since population is set by how often you feed them, feeding
 the farm is what makes it expand. There is no ceiling on the number of rooms:
 what stops a nest is running out of ground it can reach, or dying. New rooms
 branch off a chamber that is already dug rather than always going deeper, so the
@@ -246,7 +267,7 @@ nest spreads into a network.
 upper limit. A single hole for a big colony is a queue, not an entrance. A new
 shaft is sited 28+ tiles from the doors the nest already has and within
 tunnelling reach of one of its rooms, and the diggers push a gallery out to it
-and up through the ground line, straight through the spoil heap if that's
+and up through the ground line — straight through the spoil heap if that's
 where it falls, the way mound-building ants do. The home field is seeded from
 every entrance at once, so each ant simply uses whichever is nearest; nobody has
 to choose. In a test colony of 170 ants, three doors opened in sequence and the
@@ -255,7 +276,7 @@ ticks.
 
 Getting there took three fixes worth knowing about, because each looked like a
 different problem. Shafts were sunk *below* the ground line, so a finished one
-was still capped by a tile of soil and never opened, and the colony queued a
+was still capped by a tile of soil and never opened — and the colony queued a
 fresh one on top, seventeen deep. Entrance siting ran after the "two open dig
 faces" limit, so a busy colony never considered it at all. And siting depended
 on how far the *rooms* had spread, so a crowded but compact nest could never
@@ -264,15 +285,15 @@ qualify for the entrances its population called for.
 ## When nests dig into each other
 
 Left alone, nests grow *away* from each other. Rooms push outward toward
-whichever side is free; measured, both nests in a test put more rooms on their
-far side than toward their neighbour, and since the farm keeps adding ground at
+whichever side is free — measured, both nests in a test put more rooms on their
+far side than toward their neighbour — and since the farm keeps adding ground at
 its edges, the far side never runs out. Two colonies would essentially never
 meet underground by accident.
 
 So breaking through is deliberate, and driven by need rather than spite. A
 colony **set on raiding**, or **boxed in** with no ground left to grow into,
 drives a gallery at the rim of its neighbour's nearest room. Once it's cut, the
-two tunnel systems are one, and raids start going underground without anybody
+two tunnel systems are one — and raids start going underground without anybody
 being told the tunnel exists, because a raider's route is always the shortest
 open path to the rival's larder.
 
@@ -284,6 +305,55 @@ and 105 ants killed between them.
 Preservation still comes first. A nest only breaches under real pressure, and
 a well-fed colony with room to grow never will.
 
+## How a new entrance gets dug
+
+A shaft is sited against a particular room, and it isn't a door until it is
+**open to the sky and leads into that nest**. The work goes in two parts:
+diggers walk out an existing door, open the hole at the turf, then bore a
+straight gallery down to the room — digging the next tile on the line, or
+stepping on if it's already open, and edging around stone.
+
+Every piece of that fixes something that went wrong:
+
+- **Approached from below**, diggers wandered whatever air pocket sat under the
+  cap and never cut it. Shafts finished to within a tile of daylight, never
+  opened, and were abandoned.
+- **Cut from above** with nothing linking it down, a two-tile dimple in the
+  turf counted as a door. Adoption now needs an underground path to one of the
+  nest's rooms — searched through the ground, never the sky, where every hole
+  joins every other.
+- **The check looked at the wrong column.** The shaft sits mid-tile, and
+  rounding sent the check one column over, where the ground was still capped.
+  Shafts that had opened and connected were thrown away.
+- **Diggers standing in the target room** tried to bore toward the spot they
+  were already on, and jittered in place forever. They now go out and start from
+  the top.
+- **One room held the whole crew.** A digger only re-picks when its site is
+  done, so 27 of 27 sat on a single room while the shaft timed out untouched. A
+  site now keeps a crew of 8; the rest choose again.
+- **Spoil built one-tile towers** beside the shaft, where loads had nowhere to
+  slide. Loose soil can't rest on a spike, so now it doesn't: every grain needs
+  a shoulder on at least one side.
+- **A spot that failed isn't tried again.** One nest re-sited the same column
+  three times running.
+
+In the test after these fixes, both nests opened their second door on the first
+attempt — bored 82 and 50 tiles down into the nest, and no failed shafts.
+
+## Why a well-fed nest doesn't age out
+
+The queen won't lay past the brood her colony can raise. That used to be judged
+mostly by how many foragers there were, with the larder counting for one brood
+per 60 food. A colony that turned defensive, trading foragers for soldiers,
+could end up capped at 9 brood with 419 food and 330 water in store. Births fell
+behind old age, and it shrank from 53 ants to 18 with nothing wrong but the
+arithmetic.
+
+An adult costs about 12 food all told: the egg, then five or six feedings as a
+larva. So stored food now backs one brood per 12, on top of what the foragers
+can keep supplying. It's still bounded by colony size, so a handful of nurses
+isn't handed forty larvae. With the fix, both test nests grew steadily past 85
+ants by tick 25,000.
 
 ## The queen lives deep, and is fed
 
@@ -313,6 +383,14 @@ eggs. Each is set down in a free spot on the nursery floor, away from what's
 already there and from where other nurses are heading. When the floor is crowded
 it goes on the pile, as real brood heaps up, instead of on top of another piece.
 
+Tested on a fresh colony:
+
+| | |
+|---|---|
+| Queen's energy, fed by a nurse | 40 → 77 |
+| Queen reaching her new chamber, 35 tiles down | about 2.5 minutes |
+| Brood moved into a new nursery | 8 of 8 |
+| New royal chamber at 62 ants | planned below the deepest room |
 
 ## Two farms: the house farm and your own
 
@@ -348,7 +426,7 @@ uses. After that come small **frames**, ten a second by default:
 Ants glide between frames, so they move smoothly at ten updates a second. The
 stream is gzip-compressed. What only matters while someone is looking at it —
 the pheromone overlay, or one ant's goals, thoughts and history in the
-inspector, is fetched separately, and only then. One frame is built per tick of
+inspector — is fetched separately, and only then. One frame is built per tick of
 the timer and shared by every viewer, so a hundred watchers cost about what one
 does. A viewer too slow to keep up misses frames, and gets a fresh keyframe
 when it catches up rather than a broken picture.
@@ -400,9 +478,14 @@ now starts as root just long enough to hand **only that folder** to `node`
 (`docker-entrypoint.sh`), and only when it holds nothing but the farm's own save
 files. Then it runs the server as `node`.
 
-**Mount storage for the farm alone.** Use a Docker volume (leave the
+**Mount storage for the farm alone.** In Coolify, use a Docker volume (leave the
 source path empty), or a host folder used only by this app such as
-`/data/antfarm`. 
+`/data/antfarm`. Never mount the host's own `/data`: Coolify keeps its own files
+there. An earlier version of the startup script changed ownership of everything
+under `/data`, which on a host-folder mount reached Coolify's SSH keys and broke
+deploys. If that happened to you, restore Coolify's ownership as its install
+guide sets it (`chown -R 9999:root /data/coolify` and
+`chmod -R 700 /data/coolify`), and check what else lives in the host's `/data`.
 
 To check the farm is being kept, look at `/api/house/status`: `saving` should be
 `ok`, and `lastSavedSecondsAgo` should be a number once it has run a minute. The
@@ -427,9 +510,36 @@ Put it behind a reverse proxy with HTTPS before sharing the address. Sign-in
 sends the password to the server, and without HTTPS anyone on the network path
 could read it.
 
+## The landing page
+
+`landing/index.html` is a page about the project, styled to match
+lastweeksproject.com, with the house farm running live in its window
+(`/?embed=1` shows just the farm, no toolbar or panels).
+
+It's served by the same deployment. Add the landing domain to the app, and tell
+the server which domain it is:
+
+```
+ANTFARM_LANDING_HOSTS=antfarm.lastweeksproject.com
+```
+
+On that domain, `/` is the landing page; the farm stays on its own domain. To
+look at the landing page before pointing any DNS, open `/landing` on any domain
+the server answers to.
+
+Only a couple of dig faces are ever open at once. Queue rooms faster than the
+diggers can cut them and they thrash between sites, leaving every face
+half-finished — the nest grows faster by working on less at a time.
+
+A room that shows no progress while diggers are assigned to it eventually gets
+written off (press `N` to see planned, in-progress and abandoned rooms). That
+judgement is made on whether the hole is getting bigger, never on whether the
+ants look busy: an ant cutting soil barely moves, and an ant walking toward an
+unreachable chamber never stops moving.
+
 ## The farm itself grows
 
-The farm starts wide, 400 tiles across by 200 deep, and the ground is not a
+The farm starts wide — 400 tiles across by 200 deep — and the ground is not a
 fixed box. When the nest nears a wall, or simply fills most of the farm, more
 ground is added on that side and underneath, out to 1100×420. Every grid is
 reallocated and everything holding a coordinate shifts with it. If you were
@@ -443,7 +553,7 @@ minutes.
 ## Where the soil goes
 
 Soil is conserved. Every tile cut out of a tunnel is carried up and becomes a
-tile of the mound outside the entrance, the heap out there is made of the
+tile of the mound outside the entrance — the heap out there is made of the
 tunnels behind it, and nothing is quietly deleted. Loads are not dropped if
 there is nowhere to put them; the ant keeps carrying and tries further along.
 Soil freed by an ant digging itself out of a collapse, or dropped by one that
@@ -474,7 +584,7 @@ stops reading as a pile and starts reading as ground.
 Nothing is destroyed by either: weathering moves grains, it does not delete
 them, and the raised ground still matches the soil dug out tile for tile. The
 result is a wide, low rise that keeps extending outward for as long as the
-colony keeps digging, a new surface laid slowly over the old one, with the
+colony keeps digging — a new surface laid slowly over the old one, with the
 entrance shaft running up through it.
 
 ## How fast is 1×?
@@ -535,12 +645,13 @@ farm still runs; it just won't survive a refresh.
 |---|---|
 | `Space` | pause / resume |
 | `F` / `W` | food / water tool (Auto-tend does it for you) |
+| `D` | turn-to-dirt tool: click or drag over rock or open ground |
 | `P` | show pheromone trails (green = food trail, red = alarm) |
 | `N` | show the nest blueprint and how far each chamber is dug |
 | scroll / drag | zoom / pan |
-| click an ant | inspect it |
+| click an ant or brood | inspect it |
 | pinch / one-finger drag | zoom / pan on a phone or tablet (plus + and − buttons) |
-| tap an ant | inspect it on a touch screen |
+| tap an ant or brood | inspect it on a touch screen |
 
 Speed is a slider from 1× (real time) to 24× (keys `[` and `]` step it). The
 farm keeps running while the window is hidden.
@@ -565,7 +676,7 @@ farm keeps running while the window is hidden.
 ### How ants find their way
 
 There is no per-ant pathfinder. Each nest keeps a handful of BFS distance fields
-over open tiles,  one from its entrance, one from its food store, one from its
+over open tiles — one from its entrance, one from its food store, one from its
 nursery, one from its royal chamber — and an ant navigates by stepping downhill
 on whichever field it currently cares about. Rebuilt only when the tunnels
 actually change.
@@ -582,7 +693,7 @@ through the tunnels, which is a perfectly local thing for an ant to know. It is
 also why a raider can route home from deep inside a rival nest with no special
 handling at all: its own store field already points the way out and over.
 
+## License
 
-### License
 MIT — see [LICENSE](LICENSE). Use it, change it, share it; just keep the
 copyright notice.

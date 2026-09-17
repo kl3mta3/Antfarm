@@ -428,6 +428,48 @@
     return true;
   }
 
+  // A keeper turning a tile back into soil: bare rock, or an open tile in the
+  // ground or directly on top of it (not floating in the sky). Never where it
+  // could hurt or shut anyone in: a tile with an ant, brood, a body or an
+  // intruder on it, food or water lying there, or the mouth of an entrance.
+  // Returns whether the tile changed.
+  world.fillSoil = function (x, y) {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) return false;
+    if (x < 1 || x >= W - 1 || y < C.SPOIL_CEILING || y >= H) return false;
+    const t = tiles[idx(x, y)];
+    if (t !== T.ROCK && t !== T.AIR) return false;
+    if (t === T.AIR && y < surfY[x] - 1) return false;
+    if (occupied(x, y)) return false;
+    tiles[idx(x, y)] = T.SOIL;
+    world.refreshColumn(x);
+    world.dirty = true;
+    world.fieldsStale = true;
+    return true;
+  };
+
+  function occupied(x, y) {
+    const near = (px, py, r) => px + r > x && px - r < x + 1 && py + r > y && py - r < y + 1;
+    const col = AF.colony;
+    if (col) {
+      const A = col.A, B = col.B;
+      for (let i = 0; i < C.MAX_ANTS; i++) if (A.alive[i] && near(A.x[i], A.y[i], 0.7)) return true;
+      for (let b = 0; b < C.MAX_BROOD; b++) if (B.alive[b] && near(B.x[b], B.y[b], 0.7)) return true;
+      for (const c of col.corpses) if (near(c.x, c.y, 0.7)) return true;
+      for (const p of col.piles) if (near(p.x, p.y, 1.2)) return true;
+      for (const p of col.puddles) if (near(p.x, p.y, 1.6)) return true;
+      for (const t of col.intruders) if (near(t.x, t.y, 2.2)) return true;
+    }
+    const nests = AF.nests;
+    if (nests && nests.list) {
+      for (const n of nests.list) {
+        for (const e of n.entrances) {
+          if (Math.abs(e.x - (x + 0.5)) <= 1.5 && y <= e.y + 3) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // Avalanches on their own. settle() only ever moves a grain that has just
   // been dropped, so a face with nothing landing on it stayed exactly as steep
   // as it was left. While an entrance is being cut no spoil may land beside it,
