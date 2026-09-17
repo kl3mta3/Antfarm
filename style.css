@@ -66,6 +66,26 @@
     margin: 0 0 10px; font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
     color: var(--dim); font-weight: 600;
   }
+  /* Panels that fold away: click the title. A folded card keeps its title and
+     a one-line summary. */
+  .card h2.fold {
+    display: flex; align-items: center; cursor: pointer; user-select: none;
+    border-radius: 3px;
+  }
+  .card h2.fold:hover { color: var(--text); }
+  .card h2.fold:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+  .card h2.fold::after {
+    content: ''; margin-left: auto; flex: none;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid currentColor; transition: transform .15s;
+  }
+  .card.collapsed h2.fold::after { transform: rotate(-90deg); }
+  .card.collapsed > h2.fold { margin-bottom: 0; }
+  .card.collapsed > :not(h2.fold) { display: none; }
+  .foldsum {
+    margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text); opacity: .7;
+  }
   .row { display: flex; justify-content: space-between; gap: 10px; margin: 3px 0; }
   .row .k { color: var(--dim); }
   .row .v { font-variant-numeric: tabular-nums; }

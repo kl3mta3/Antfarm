@@ -70,8 +70,8 @@
 
     <div id="nestCards"></div>
 
-    <div class="card" id="antCard">
-      <h2>Inspector</h2>
+    <div class="card" id="antCard" data-fold="inspector">
+      <h2 class="fold" role="button" tabindex="0" data-fold-key="inspector">Inspector</h2>
       <div class="empty">Click any ant to follow its mind.</div>
       <div class="hint">
         <kbd>Space</kbd> pause &middot; <kbd>F</kbd> food &middot; <kbd>W</kbd> water &middot;
@@ -79,8 +79,8 @@
       </div>
     </div>
 
-    <div class="card">
-      <h2>Lifetime</h2>
+    <div class="card" data-fold="lifetime">
+      <h2 class="fold" role="button" tabindex="0" data-fold-key="lifetime">Lifetime<span class="foldsum" id="lifeSum"></span></h2>
       <div class="row"><span class="k">Born</span><span class="v" id="births">0</span></div>
       <div class="row"><span class="k">Died</span><span class="v" id="deaths">0</span></div>
       <div class="row"><span class="k">&nbsp;&nbsp;starved</span><span class="v" id="starved">0</span></div>

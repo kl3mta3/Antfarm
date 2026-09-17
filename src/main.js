@@ -900,6 +900,7 @@
     $('dirt').textContent = s.tilesDug;
     $('fed').textContent = s.larvaeFed;
     $('fps').textContent = (HOUSE ? AF.mirror.rate : simRate) + ' ticks/s';
+    updateLifeSummary();
 
     if (flashUntil && performance.now() > flashUntil) {
       $('flash').hidden = true;
@@ -959,33 +960,103 @@
   // The side panels are rebuilt several times a second. A name under the
   // pointer would be swapped out mid-hover (its underline flickers) and
   // mid-click (press and release land on different elements, so no click).
-  // While the pointer is on a name, that panel holds still.
+  // While the pointer is on a name, or on a panel's title (click to fold),
+  // that panel holds still.
+  const HOLD_ON = '.nameable, h2.fold';
   const holding = { nestCards: null, antCard: null };
   for (const id of Object.keys(holding)) {
     const box = $(id);
     box.addEventListener('pointerover', e => {
-      const el = e.target.closest('.nameable');
+      const el = e.target.closest(HOLD_ON);
       if (el) holding[id] = el;
     });
     box.addEventListener('pointerout', e => {
-      const el = e.target.closest('.nameable');
+      const el = e.target.closest(HOLD_ON);
       if (el && !(e.relatedTarget && el.contains(e.relatedTarget))) holding[id] = null;
     });
   }
   const held = id => holding[id] !== null && holding[id].isConnected;
 
-  function renderNestCards() {
-    if (held('nestCards')) return;
+  // ---- folding panels ----
+  // Each nest card, the inspector and the lifetime card fold away when their
+  // title is clicked, like an accordion. What's folded is remembered in this
+  // browser. The nest cards and the inspector are rebuilt constantly, so they
+  // ask foldHead() for their title and leave out their body while folded.
+  const FOLD_STORE = 'antfarm.folded';
+  const folded = new Set();
+  try { for (const k of JSON.parse(localStorage.getItem(FOLD_STORE) || '[]')) folded.add(String(k)); } catch (e) { /* fine */ }
+
+  function foldHead(inner, key, summary) {
+    const shut = folded.has(key);
+    return '<h2 class="fold" role="button" tabindex="0" aria-expanded="' + !shut + '" data-fold-key="' + key + '"' +
+      ' title="' + (shut ? 'Show' : 'Hide') + '">' + inner +
+      (shut && summary ? '<span class="foldsum">' + summary + '</span>' : '') + '</h2>';
+  }
+  function inspHead() {
+    let summary = '';
+    if (R.selected >= 0 && A.alive[R.selected]) summary = esc(antLabel(R.selected));
+    else if (R.selectedBrood >= 0 && B.alive[R.selectedBrood]) summary = ['Egg', 'Larva', 'Pupa'][B.stage[R.selectedBrood]];
+    return foldHead('Inspector', 'inspector', summary);
+  }
+  function applyFolds() {
+    for (const el of document.querySelectorAll('#side [data-fold]')) {
+      const shut = folded.has(el.dataset.fold);
+      el.classList.toggle('collapsed', shut);
+      const h = el.querySelector(':scope > h2.fold');
+      if (h) { h.setAttribute('aria-expanded', String(!shut)); h.title = shut ? 'Show' : 'Hide'; }
+    }
+  }
+  function toggleFold(key) {
+    if (!key) return;
+    if (folded.has(key)) folded.delete(key); else folded.add(key);
+    try { localStorage.setItem(FOLD_STORE, JSON.stringify([...folded])); } catch (e) { /* fine */ }
+    renderNestCards(true);
+    renderAntCard(true);
+    applyFolds();
+    // Redrawn under the pointer: keep holding the new title, or the next
+    // click on it could land mid-rebuild and be lost.
+    for (const id of Object.keys(holding)) {
+      const old = holding[id];
+      if (old && !old.isConnected && old.dataset && old.dataset.foldKey) {
+        holding[id] = $(id).querySelector('h2.fold[data-fold-key="' + old.dataset.foldKey + '"]');
+      }
+    }
+    updateLifeSummary();
+  }
+  function updateLifeSummary() {
+    const t = col.totals();
+    $('lifeSum').textContent = folded.has('lifetime')
+      ? t.births.toLocaleString() + ' born · ' + t.deaths.toLocaleString() + ' died' : '';
+  }
+  // Click a title to fold it; a nest's or ant's name inside it still renames.
+  $('side').addEventListener('click', e => {
+    if (e.target.closest('.nameable')) return;
+    const h = e.target.closest('h2.fold');
+    if (h) toggleFold(h.dataset.foldKey);
+  });
+  $('side').addEventListener('keydown', e => {
+    const h = e.target.closest && e.target.closest('h2.fold');
+    if (!h || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    e.stopPropagation();          // Space here folds; it doesn't pause the farm
+    toggleFold(h.dataset.foldKey);
+  });
+  applyFolds();
+
+  function renderNestCards(force) {
+    if (!force && held('nestCards')) return;
     let html = '';
     for (const nest of AF.nests.list) {
       const pop = Math.max(1, nest.count);
       const dead = !nest.alive || nest.count === 0;
       const name = nestLabel(nest);
 
-      html += '<div class="card">';
-      html += '<h2><span class="swatch" style="background:' + nest.colors.tint +
+      const key = 'nest:' + nest.id;
+      html += '<div class="card' + (folded.has(key) ? ' collapsed' : '') + '" data-fold="' + key + '">';
+      html += foldHead('<span class="swatch" style="background:' + nest.colors.tint +
         '"></span><span' + nameAttrs('data-nest', nest.id) + '>' + esc(name) + '</span>' +
-        (dead ? ' — gone' : '') + '</h2>';
+        (dead ? ' — gone' : ''), key, dead ? '' : nest.count + (nest.count === 1 ? ' ant' : ' ants'));
+      if (folded.has(key)) { html += '</div>'; continue; }
 
       if (dead) {
         html += '<div class="empty">No queen, no workers. Its chambers passed to whoever was nearest.</div></div>';
@@ -1134,7 +1205,7 @@
           return;
         }
       }
-      card.innerHTML = '<h2>Inspector</h2>' +
+      card.innerHTML = inspHead() +
         '<div class="name">' + STAGE_NAME[broodSel.stage] + '</div>' +
         '<div class="thought">' + (emerged
           ? 'It has come out of its cocoon as a new adult.'
@@ -1168,7 +1239,7 @@
     const next = st === 0 ? 'Hatches in' : st === 1 ? 'Pupates in' : 'Emerges in';
     const depth = Math.max(0, B.y[b] - W.surfaceAt(B.x[b]));
 
-    let html = '<h2>Inspector</h2>' +
+    let html = inspHead() +
       '<div class="row"><span class="name">' + STAGE_NAME[st] + (HOUSE ? '' : ' #' + B.uid[b]) + '</span>' +
       (nest ? '<span class="badge" style="background:' + nest.colors.nurse + '">Brood</span>' : '') + '</div>' +
       (nest && AF.nests.count() > 1
@@ -1203,7 +1274,7 @@
     if (i < 0) {
       if (force || !card.dataset.empty) {
         card.dataset.empty = '1';
-        card.innerHTML = '<h2>Inspector</h2><div class="empty">Click any ant to follow its mind.</div>' +
+        card.innerHTML = inspHead() + '<div class="empty">Click any ant to follow its mind.</div>' +
           '<div class="hint"><kbd>Space</kbd> pause &middot; <kbd>F</kbd> food &middot; ' +
           '<kbd>W</kbd> water &middot; <kbd>P</kbd> pheromones &middot; scroll to zoom, drag to pan</div>';
       }
@@ -1212,7 +1283,7 @@
     card.dataset.empty = '';
 
     if (!A.alive[i]) {
-      card.innerHTML = '<h2>Inspector</h2>' +
+      card.innerHTML = inspHead() +
         '<div class="name">Ant #' + A.uid[i] + '</div>' +
         '<div class="thought">This ant is dead. Its body went back to the biomass pool, ' +
         'and slot ' + i + ' is queued for the next pupa.</div>' +
@@ -1229,7 +1300,7 @@
     const nest = AF.nests.get(A.nest[i]);
     const casteKey = AF.CASTE_KEY[caste];
 
-    let html = '<h2>Inspector</h2>' +
+    let html = inspHead() +
       '<div class="row"><span class="name"><span' + nameAttrs('data-ant', i) + '>' +
         esc(antLabel(i)) + '</span></span>' +
       '<span class="badge" style="background:' + nest.colors[casteKey] + '">' +
