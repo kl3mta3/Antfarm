@@ -1,6 +1,6 @@
 # Antfarm has no dependencies — the server is plain Node and the farm is plain
 # JavaScript — so this is about as small as a container gets.
-FROM node:20-alpine
+FROM node:24.22.1-alpine
 
 WORKDIR /app
 COPY index.html style.css server.js house.js house-worker.js ./
